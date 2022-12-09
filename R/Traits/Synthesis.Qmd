@@ -1,0 +1,543 @@
+---
+title: Overview trait information
+author:
+  - name: Stefan Kunz
+date: last-modified
+format: 
+  
+  html:
+    self-contained: true
+    number-sections: false
+    number-depth: 3
+    anchor-sections: true
+    code-tools: true
+    code-fold: false
+    code-link: false
+    code-block-bg: "#f1f3f5"
+    code-block-border-left: "#31BAE9"
+    mainfont: Source Sans Pro
+    theme: journal
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    captions: true
+    cap-location: margin
+    table-captions: true
+    tbl-cap-location: margin
+    reference-location: margin
+comments:
+  hypothesis: true
+execute:
+  warning: false
+  message: false
+  echo : false
+editor: visual
+output_dir: "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Taxonomy_trait_information_overview"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+library(data.table)
+library(dplyr)
+library(reactable)
+library(htmltools)
+library(ggplot2)
+library(patchwork)
+library(ggsci)
+library(plotly)
+
+# Functions
+source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/Functions.R")
+
+# Paths
+path_cache <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Cache/"
+
+path_data <-
+  "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Data/"
+```
+
+### Number of taxa with complete trait information
+
+Table shows the number of taxa with complete trait profiles (`N compl.`), the total number of taxa per region and type (`Total N by type`), and the total number of taxa per region (`Total N`). In column `N compl.`, aggregated trait information (for taxa on family level) and assigned trait information is considered (genus level traits to species). Only taxa on family level and higher taxonomic resolution are considered. Grouping features and traits used are: feeding mode, locomotion, respiration, sensitivity to organic pollutants, size, and voltinism. Trait databases used: Vieira et al. (2006) and Twardochleb et al. (2020). [Twardochleb, L., Hiltner, E., Pyne, M., & Zarnetske, P. (2021). Freshwater insects CONUS: A database of freshwater insect occurrences and traits for the contiguous United States. Global Ecology and Biogeography. https://doi.org/10.1111/geb.13257 .]{.aside} [Vieira, N. K. M., Poff, N. L., Carlisle, D. M., II, S. R. M., Koski, M. L., & Kondratieff, B. C. (2006). A Database of Lotic Invertebrate Traits for North America. 19.]{.aside}
+
+```{r}
+# Trait matrix with assigned and aggregated traits
+trait_matrix_final <- load_data(
+    path = path_cache,
+    pattern = "trait\\_matrix\\_final.*",
+    name_rm_pattern = "trait\\_matrix\\_final\\_"
+)
+trait_matrix_final <- rbindlist(trait_matrix_final, idcol = "Region", fill = TRUE)
+
+# WF
+trait_matrix_final <-
+  dcast(trait_matrix_final, ... ~ variable, value.var = "value")
+trait_names <-
+  grep("feed|resp|size|locom|volt", names(trait_matrix_final), value = TRUE)
+
+# Add toxicity data here and recalculate completeness
+# TODO: Merge needs to be updated!
+tab_spear <-
+  fread(file.path(path_data, "sensitivity_values_SPEAR.csv"))
+tab_spear[, Taxon := sub(" Gen\\. sp\\.| sp\\.| ssp\\.", "", Taxon)]
+ 
+# Direct merge
+# For sensitivity, only 50 to 60 taxa per Region have a value
+# trait_matrix_final[taxon %in% tab_spear$Taxon, .N, by = Region]
+trait_matrix_final[tab_spear, sensitivity_organic := Sensitivität,
+  on = c(taxon = "Taxon")
+]
+ 
+### Add sensitivity on genus level for species ----
+# Create a subset of tab_spear with taxa on genus level
+# Merge conditionally on trait matrix (i.e. conditional if an NA value exists)
+
+# Merge first on subset of species with no trait info available
+# (via genus)
+# Then merge subset back via taxon (which should be species when correctly subsetted)
+genera_assign_sensitivity <-
+  tab_spear[Taxon %in% trait_matrix_final[taxonomic_level == "species" &
+                                            is.na(sensitivity_organic) &
+                                            genus %in% tab_spear$Taxon, genus],]
+tm_final_spec_miss_sens <-
+  trait_matrix_final[taxonomic_level == "species" &
+                       is.na(sensitivity_organic) &
+                       genus %in% tab_spear$Taxon, ]
+tm_final_spec_miss_sens[genera_assign_sensitivity,
+                        sensitivity_organic := i.Sensitivität,
+                        on = c(genus = "Gattung")]
+trait_matrix_final[tm_final_spec_miss_sens, sensitivity_organic := i.sensitivity_organic,
+                   on = "taxon"]
+### Add sensitivity on family level for genera, tribe & subfamily ----
+# Genera without sensitivity information for which sensitivity on family level
+# could be assigned
+family_assign_sensitivity <-
+  tab_spear[Taxon %in% trait_matrix_final[taxonomic_level %in% c("genus", "tribe", "subfamily") &
+                                            is.na(sensitivity_organic) &
+                                            family %in% tab_spear$Taxon, family], ]
+tm_final_genus_miss_sens <-
+  trait_matrix_final[taxonomic_level %in% c("genus", "tribe", "subfamily") &
+                       is.na(sensitivity_organic) &
+                       family %in% tab_spear$Taxon, ]
+tm_final_genus_miss_sens[family_assign_sensitivity,
+                        sensitivity_organic := i.Sensitivität,
+                        on = c(family = "Familie")]
+trait_matrix_final[tm_final_genus_miss_sens, sensitivity_organic := i.sensitivity_organic,
+                   on = "taxon"]
+
+### Add sensitivity on family level for species ----
+family_assign_sensitivity_spec <-
+  tab_spear[Taxon %in% trait_matrix_final[taxonomic_level == "species" &
+                                            is.na(sensitivity_organic) &
+                                            family %in% tab_spear$Taxon, family],]
+tm_final_species_miss_sens2 <-
+  trait_matrix_final[taxonomic_level == "species" &
+                       is.na(sensitivity_organic) &
+                       family %in% tab_spear$Taxon, ]
+trait_matrix_final[tm_final_species_miss_sens2, sensitivity_organic := i.sensitivity_organic,
+                   on = "taxon"]
+
+### Add sensitivity on order level for species, genus, and family ----
+# Only for particular orders with small variation. 
+# - Plecoptera
+# 434 times value 0.38, and only once 0.25
+# Hmisc::describe(tab_spear[Ordnung == "Plecoptera", .(Sensitivität)])
+# tab_spear[Ordnung == "Plecoptera" & Sensitivität != 0.38,]
+# Assign 0.38 for Plecoptera
+trait_matrix_final[order == "Plecoptera" & is.na(sensitivity_organic), sensitivity_organic := 0.38]
+
+# Update trait info column
+trait_matrix_final[, trait_info := fcase(
+  trait_info == "incomplete", "incomplete",
+  trait_info == "no_information", "no_information",
+  trait_info == "complete" & is.na(sensitivity_organic),
+  "incomplete",
+  trait_info == "complete" & !is.na(sensitivity_organic),
+  "complete"
+)]
+```
+
+```{r}
+# Prepare summary of trait information prior and after adding aggregated
+# and assigned traits
+summary <- trait_matrix_final[, .N, by = c("Region", "type", "trait_info")] %>%
+  .[order(Region, type, trait_info), ]
+summary[, total_N := sum(N), by = Region]
+summary[, type_N := sum(N), by = c("Region", "type")]
+setcolorder(
+    summary,
+    c("Region", "type", "trait_info", "N", "type_N", "total_N")
+)
+setnames(summary,
+    old = c(
+        "type",
+        "trait_info",
+        "N",
+        "type_N",
+        "total_N"
+    ),
+    new = c(
+        "Type",
+        "Trait info", 
+        "N compl.",
+        "Total N by type",
+        "Total N"
+    )
+)
+knitr::kable(summary[
+  `Trait info` == "complete",
+  .(Region, Type, `N compl.`, `Total N by type`, `Total N`)
+])
+```
+
+### Available trait information
+
+Percentage of taxa that possess information for the different grouping features. Only taxa on family level and higher taxonomic resolution are considered. Abbreviations: Feed - Feeding mode, Locom - Locomotion, Resp - Respiration, Volt - Voltinism, Sens - Sensitivity to organic pollutants (including Pesticides) according to *von der Ohe & Liess 2004*.
+
+```{r}
+# Initial dataset (without aggregation and assignment)
+# data_gaps_traits <- load_data(
+#     path = path_cache, 
+#     pattern = "data\\_gaps.*",
+#     name_rm_pattern = "data\\_gaps\\_"
+# )
+# data_gaps_traits <- rbindlist(data_gaps_traits, idcol = "Region")
+# data_gaps_traits_lf <- dcast(data_gaps_traits, ... ~ `Grouping feature`, value.var = "Available information [%]")
+# setnames(
+#     data_gaps_traits_lf,
+#     c(
+#         "feed",
+#         "locom",
+#         "resp",
+#         "size",
+#         "volt"
+#     ),
+#     paste(c(
+#         "Feed",
+#         "Locom",
+#         "Resp",
+#         "Size",
+#         "Volt"
+#     ), "[%]")
+# )
+
+compl_overview <- trait_matrix_final[, completeness_trait_data(.SD),
+  .SDcols = c(trait_names, "sensitivity_organic"),
+  by = c("Region", "type")
+]
+setnames(compl_overview,
+  old = c("V1", "V2"),
+  new = c("Available information [%]", "Grouping feature")
+)
+
+compl_overview <- dcast(compl_overview, ... ~ `Grouping feature`,
+  value.var = "Available information [%]"
+)
+setnames(
+    compl_overview,
+    c(
+        "^feed",
+        "^locom",
+        "^resp",
+        "^size",
+        "^volt",
+        "^sensitivity"
+    ),
+    c(paste(c(
+        "Feed",
+        "Locom",
+        "Resp",
+        "Size",
+        "Volt"
+    ), "%"), 
+    "Sens %"),
+    skip_absent = TRUE
+)
+```
+
+```{r}
+# knitr::kable(data_gaps_traits_lf)
+knitr::kable(compl_overview)
+```
+
+Organic sensitivity values are based on the LC50 values obtained laboratory tests with an exposure of 24 to 48 hours. The sensitivity is calculated as following:
+
+$S = \frac{log(LC50_{D.magna})}{LC50_i}$
+
+where $S =$ relative sensitivity; $LC50_{D.magna} =$ experimental LC50 for Daphnia magna; and $LC50_i =$ experimental LC50 for a species i. Thus, the organic sensitivity values are standardized based on the toxicological sensitivity of Daphnia magna, i.e. Less sensitive than Daphnia magna \< 0 \< more sensitive than Daphnia magna. Further information can be found in the publication. [von der Ohe, P. C., & Liess, M. (2004). Relative sensitivity distribution of aquatic invertebrates to organic and metal compounds. Environmental Toxicology and Chemistry, 23(1), 150--156. https://doi.org/10.1897/02-577]{.aside}
+
+### Total abundance and trait information
+
+It seems there is for most of the most abundant aquatic insect taxa trait information available. Exceptions are for example Odonata, for which for most taxa only have incomplete trait information. For non-insects trait information is often scarce.
+
+```{r, echo = FALSE, message=FALSE}
+# Load abundance data
+# Merge with trait matrix final
+# One graph with facets for all regions?
+abund <- load_data(
+    path = path_cache,
+    pattern = "abundance\\_preproc.*",
+    name_rm_pattern = "abundance\\_preproc\\_"
+)
+abund <- rbindlist(abund, idcol = "Region", fill = TRUE)
+
+abund[trait_matrix_final,
+  `:=`(
+    trait_info = i.trait_info,
+    type = i.type
+  ),
+  on = c("Region", "taxon")
+]
+# abund[, order := as.factor(order)]
+abund[, order := fcase(
+   !is.na(order), order,
+   is.na(order), "NA"
+ )]
+
+# Plot
+pl_insects <- abund[type == "insect",
+  .(Region,
+    order,
+    family,
+    taxon,
+    total_abund,
+    trait_info
+  )
+] %>%
+  .[order(-total_abund), ] %>%
+  unique(.) %>%
+  ggplot(.) +
+  geom_violin(aes(x = order, y = log(total_abund))) +
+  geom_jitter(aes(
+    x = order, y = log(total_abund),
+    col = trait_info,
+    key = taxon
+  ),
+  width = 0.1,
+  size = 1.5
+  ) +
+  facet_grid(. ~ Region) + 
+  coord_flip() +
+  ylim(0, 16) +
+  labs(x = "Order", y = "log(Total abundance)", color = "Trait information") +
+  scale_color_manual(values = c("steelblue", "forestgreen", "#5d5d5d")) +
+  theme_bw() +
+  theme(
+    axis.title = element_text(size = 16),
+    axis.text.x = element_text(
+      family = "Roboto Mono",
+      size = 12
+    ),
+    axis.text.y = element_text(
+      family = "Roboto Mono",
+      size = 12
+    ),
+    legend.title = element_text(
+      family = "Roboto Mono",
+      size = 16
+    ),
+    legend.text = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ), 
+    aspect.ratio = 10/3
+  )
+
+pl_non_insects <- abund[type == "non_insect",
+  .(Region,
+    order,
+    family,
+    taxon,
+    total_abund,
+    trait_info
+  )
+] %>%
+  .[order(-total_abund), ] %>%
+  unique(.) %>%
+  ggplot(.) +
+  geom_violin(aes(x = order, y = log(total_abund))) +
+  geom_jitter(aes(
+    x = order, y = log(total_abund),
+    col = trait_info,
+    key = taxon
+  ),
+  width = 0.1,
+  size = 1.5
+  ) +
+  facet_grid(. ~ Region) + 
+  coord_flip() +
+  ylim(0, 20) +
+  labs(x = "Order", y = "log(Total abundance)", color = "Trait information") +
+  scale_color_manual(values = c("steelblue", "forestgreen", "#5d5d5d")) +
+  theme_bw() +
+  theme(
+    axis.title = element_text(size = 16),
+    axis.text.x = element_text(
+      family = "Roboto Mono",
+      size = 12
+    ),
+    axis.text.y = element_text(
+      family = "Roboto Mono",
+      size = 12
+    ),
+    legend.title = element_text(
+      family = "Roboto Mono",
+      size = 16
+    ),
+    legend.text = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ), 
+    aspect.ratio = 10/2
+  )
+```
+
+```{r}
+# abund[percentile_category_order == "75th_and_above" & trait_info %in% c("incomplete", "no_information"), 
+#   uniqueN(taxon), by = c("Region", "type")]
+abund[, richness_order := uniqueN(taxon), by = c("Region", "order")]
+abund[trait_info == "complete",
+  completeness_order := round(uniqueN(taxon) / richness_order, digits = 2),
+  by = c("Region", "order")
+]
+summary_completeness <- unique(abund[
+  !is.na(completeness_order),
+  .(Region, order, completeness_order, type)
+])
+summary_completeness[, completeness := completeness_order*100]
+```
+
+#### Plots completeness per order
+
+```{r}
+pl_compl_insects <- ggplot(summary_completeness[type == "insect", ]) +
+    geom_bar(aes(x = order, y = completeness, fill = Region),
+        stat = "identity",
+        width = 0.5,
+        position = "dodge"
+    ) +
+    labs(x = "Completeness per order %", y = "Order") +
+    coord_flip() +
+    scale_fill_d3() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(size = 16),
+        axis.text.x = element_text(
+            family = "Roboto Mono",
+            size = 12
+        ),
+        axis.text.y = element_text(
+            family = "Roboto Mono",
+            size = 12
+        ),
+        legend.title = element_text(
+            family = "Roboto Mono",
+            size = 16
+        ),
+        legend.text = element_text(
+            family = "Roboto Mono",
+            size = 14
+        ),
+        strip.text = element_text(size = 12)
+    )
+```
+
+```{r}
+pl_compl_non_insects <- ggplot(summary_completeness[type == "non_insect", ]) +
+    geom_bar(aes(x = order, y = completeness, fill = Region),
+        stat = "identity",
+        width = 0.5,
+        position = "dodge"
+    ) +
+    labs(x = "Completeness per order %", y = "Order") +
+    coord_flip() +
+    scale_fill_d3() +
+    theme_bw() +
+    theme(
+        axis.title = element_text(size = 16),
+        axis.text.x = element_text(
+            family = "Roboto Mono",
+            size = 12
+        ),
+        axis.text.y = element_text(
+            family = "Roboto Mono",
+            size = 12
+        ),
+        legend.title = element_text(
+            family = "Roboto Mono",
+            size = 16
+        ),
+        legend.text = element_text(
+            family = "Roboto Mono",
+            size = 14
+        ),
+        strip.text = element_text(size = 12)
+    )
+```
+
+##### Aquatic insects
+
+Left Plot shows the total abundance of aquatic insects across sites and an indication if taxa contain complete trait information. On the right side the percentage of taxa with complete trait profiles within a given order is displayed. When orders that are not displayed on the right side than no taxon within that order had a complete trait profile. Considered are only taxa on species, genus, and family level.
+
+```{r}
+#| fig-width: 25
+#| fig-height: 23
+#| column: screen-inset
+#| layout: [[60, 40]]
+ggplotly(pl_insects, tooltip = "taxon")
+ggplotly(pl_compl_insects)
+```
+
+##### Aquatic non-insects
+
+Left Plot shows the total abundance of aquatic insects across sites and an indication if taxa contain complete trait information. On the right side the percentage of taxa with complete trait profiles within a given order is displayed. When orders that are not displayed on the right side than no taxon within that order had a complete trait profile. Considered are only taxa on species, genus, and family level. Order `NA` means that currently the order of these taxa is under debate (members belong to Tubellaria, Gastropoda, Arachnida, Collembola, Clitellata, Bivalvila, Nematoda, Bryozoa, Acari, Prosobranchia, Nematomorpha).
+
+```{r}
+#| fig-width: 25
+#| fig-height: 23
+#| column: screen-inset
+#| layout: [[60, 40]]
+ggplotly(pl_non_insects, tooltip = "taxon")
+ggplotly(pl_compl_non_insects)
+```
+
+### Abundant taxa with missing trait information
+
+Taxa with incomplete trait profiles that are highly abundant compared to other taxa in their order. These taxa are in the 75th percentile or above within their order in terms of total abundance across sites.
+
+```{r}
+#| column: screen-inset
+trait_matrix_final[trait_info %in% c("incomplete", "no_information") &
+    percentile_category_order == "75th_and_above",
+.SD,
+.SDcols = c(
+    "Region",
+    "taxon",
+    "species",
+    "genus",
+    "family",
+    "order",
+    "percentile_category_order",
+    trait_names, 
+    "sensitivity_organic"
+)] %>% 
+.[order(Region, order), ]  %>% 
+    reactable(.,
+        columns = list(
+            taxon = colDef(name = "Taxon", width = 150),
+            species = colDef(name = "Species"),
+            genus = colDef(name = "Genus"),
+            family = colDef(name = "Family"),
+            order = colDef(name = "Order"),
+            percentile_category_order = colDef(name = "Percentile Total abund. (Order)", width = 100)
+        ),
+        filterable = TRUE,
+        highlight = TRUE,
+        defaultPageSize = 10
+    )
+```
+
+<!-- Mail: most abundant taxa? just aquatic insects? Names of regions - WSC?, KIS -->

@@ -1,0 +1,154 @@
+---
+title: Overview pesticide information
+author:
+  - name: Stefan Kunz
+date: last-modified
+format: 
+  
+  html:
+    self-contained: true
+    number-sections: false
+    number-depth: 3
+    anchor-sections: true
+    code-tools: true
+    code-fold: false
+    code-link: false
+    code-block-bg: "#f1f3f5"
+    code-block-border-left: "#31BAE9"
+    mainfont: Source Sans Pro
+    theme: journal
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    captions: true
+    cap-location: margin
+    table-captions: true
+    tbl-cap-location: margin
+    reference-location: margin
+comments:
+  hypothesis: true
+execute:
+  warning: false
+  message: false
+  echo : false
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+# ____________________________________________________________________
+# Preprocessing & plotting of pesticide data for the RSQA
+# TODO: 
+# - Plot chemical concentrations
+# - Unit of Cmax?
+# ____________________________________________________________________
+
+source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/Set_up.R")
+```
+
+```{r}
+rsqa_cmax <- read_xlsx(file.path(path_in, "Chemicals", "RSQA Cmax only data.xlsx"))
+setDT(rsqa_cmax)
+
+# subset to sites where biological samples (inverts) have been taken
+rsqa_cmax <- rsqa_cmax[Has.Inverts.x == "y", ]
+
+# For now do not consider sediment data 
+rsqa_cmax <- rsqa_cmax[, .SD, .SDcols = patterns("TSTAID|\\.x|\\_Cmax")]
+
+# Some of the columns containing pesticide information are characters
+char_tvars <- names(Filter(is.character, rsqa_cmax[, .SD, .SDcols = patterns("\\_Cmax")]))
+rsqa_cmax[, (char_tvars) := as.numeric(get(char_tvars))] 
+
+# LF
+rsqa_cmax_lf <- melt(rsqa_cmax, 
+     measure.vars = patterns("\\_Cmax"),
+     variable.name = "pesticide",
+     value.name = "cmax")
+
+# Rm Cmax for plotting
+rsqa_cmax_lf[, pesticide := sub("\\_Cmax", "", pesticide)]
+rsqa_cmax_lf[pesticide == "Aldicarb", max(cmax), by = "Region.x"]
+
+# Name corrections 
+# Check which chemical names do not match with standartox 
+# catal <- stx_catalog()
+# rsqa_cmax_lf[, pesticide_name_match := tolower(pesticide)]
+# rsqa_cmax_lf[!pesticide_name_match %in% catal$cname$variable, pesticide_name_match] %>% 
+#   unique() %>% 
+#   query_google()
+rsqa_cmax_lf[pesticide == "X24D", pesticide := "2,4-D"]
+rsqa_cmax_lf[pesticide == "Azinphosmethyl", pesticide := "Azinphos-methyl"]
+rsqa_cmax_lf[pesticide == "Chlorimuronethyl", pesticide := "Chlorimuron-ethyl"]
+rsqa_cmax_lf[pesticide == "Dacthal", pesticide := "Chlorthal-dimethyl"]
+rsqa_cmax_lf[pesticide == "Dimethenamid", pesticide := "Dimethenamide"]
+rsqa_cmax_lf[pesticide == "Kresoximmethyl", pesticide := "Kresoxim-methyl"]
+rsqa_cmax_lf[pesticide == "Halosulfuronmethyl", pesticide := "Halosulfuron-methyl"]
+rsqa_cmax_lf[pesticide == "Sulfometuronmethyl", pesticide := "Sulfometuron-methyl"]
+rsqa_cmax_lf[pesticide == "Parathionmethyl", pesticide := "Parathion-methyl"]
+rsqa_cmax_lf[pesticide == "Parathionethyl", pesticide := "Parathion"] # commonly known as parathion
+rsqa_cmax_lf[pesticide == "Pronamide", pesticide := "Propyzamide"] # Seems to be a formulation, active ingredient is Propyzamide
+rsqa_cmax_lf[pesticide == "Piperonyl.butoxide", pesticide := "Piperonyl butoxide"]
+rsqa_cmax_lf[pesticide == "TPM", pesticide := "Thiophanatemethyl"] #?
+# "propyzamide" %in% catal$cname$variable
+
+# EPTC?
+# catal$cname$variable[catal$cname$variable %like% "dipropylcarbamothioat"]
+# catal$cname$variable[catal$cname$variable %like% "eptc"]
+
+# Fentin -> which one?
+# Fentin acetat - fungicide
+# Fentin chloride - biozide, molluscicide 
+# catal$cname$variable[catal$cname$variable %like% "fentin"]
+# catal$cname$variable[catal$cname$variable %like% "fentinhydroxid"]
+saveRDS(rsqa_cmax_lf, file = file.path(data_cache, "rsqa_cmax_lf.rds"))
+```
+
+```{r}
+# Create list of plots of Cmax concentrations
+pl_ov_pesticides <- function(data) {
+  ggplot(data,
+         aes(x = TSTAID, y = cmax)) +
+    geom_point() +
+    coord_flip() +
+    facet_wrap(. ~ Region.x,
+               scales = "free") +
+    labs(y = "Sites") +
+    theme_bw() +
+    theme(
+      axis.title.x = element_text(size = 16),
+      axis.text.x = element_text(family = "Roboto Mono",
+                                 size = 12),
+      axis.title.y = element_text(size = 16),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(), 
+      legend.title = element_text(family = "Roboto Mono",
+                                  size = 16),
+      legend.text = element_text(family = "Roboto Mono",
+                                 size = 14)
+    )
+}
+ls_pesticide_plots <- split(rsqa_cmax_lf, by = "pesticide") %>% 
+  lapply(., pl_ov_pesticides)
+```
+
+### Cmax Pesticides
+
+:::: {.column-screen}
+::: {.panel-tabset}
+```{r}
+#| results: asis
+#| fig-width: 14
+#| fig-height: 6
+iwalk(ls_pesticide_plots, ~ {
+  cat('## ', .y, '\n\n')
+  
+  print(.x)
+  
+  cat('\n\n')
+  
+})
+```
+:::
+::::

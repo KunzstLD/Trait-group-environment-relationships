@@ -1,0 +1,66 @@
+---
+title: Tables Results
+author:
+  - name: Stefan Kunz
+date: last-modified
+format: 
+  
+  html:
+    self-contained: true
+    number-sections: false
+    number-depth: 3
+    anchor-sections: true
+    code-tools: true
+    code-fold: false
+    code-link: false
+    code-block-bg: "#f1f3f5"
+    code-block-border-left: "#31BAE9"
+    mainfont: Source Sans Pro
+    theme: journal
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    captions: true
+    cap-location: margin
+    table-captions: true
+    tbl-cap-location: margin
+    reference-location: margin
+comments:
+  hypothesis: true
+execute:
+  warning: false
+  message: false
+  echo : false
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/Set_up.R")
+```
+
+```{r}
+mean_tps <- readRDS(file.path(path_cache, "mean_tps.rds"))
+defining_traits <- unique(mean_tps[!is.na(defining_tc), .(Region, group, n_taxa_group, defining_tc)])
+defining_traits[mean_tps[trait == "sensitivity_organic",],
+                mean_sensitivity_organic := i.mean_affinity,
+                on = c("Region", "group")]
+defining_traits[, mean_sensitivity_organic := round(mean_sensitivity_organic, digits = 4)]
+
+reactable(
+  defining_traits[order(Region, group), ],
+  columns = list(
+    Region = colDef(width = 120),
+    group = colDef(name = "TPG", width = 60),
+    n_taxa_group = colDef(name = "Nr. taxa per TPG", width = 100),
+    defining_tc = colDef(
+      name = "Defining trait combinations"),
+    mean_sensitivity_organic = colDef(name = "Mean S_org", width = 100)
+  ),
+  filterable = TRUE,
+  highlight = TRUE,
+  defaultPageSize = 27
+)
+
+```
