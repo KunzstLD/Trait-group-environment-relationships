@@ -71,6 +71,9 @@ if (params$region == "Northeast") {
   northeast_abund <- fread(
     "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Data/NoA/NE_NoAmbig_Species_Matrix n92_Primer.csv"
   )
+  # Conchapelopia (Helopelopia) & Cricotopus (Isocladius)` -> duplicates with zero Abundance, hence removed
+  northeast_abund$`Conchapelopia (Helopelopia)` <- NULL
+  northeast_abund$`Cricotopus (Isocladius)` <- NULL
   northeast_abund_lf <- melt(
     northeast_abund,
     id.vars = "TSTAID",

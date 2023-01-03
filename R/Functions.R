@@ -133,6 +133,29 @@ mycluster_hc <- function(x, k) {
                         k = k))
 }
 
+## Community weighted mean trait ----
+# relatively slow, could improve the loop?
+# TODO: transform abundances?
+calc_cwm <- function(abund,
+                     trait,
+                     trait_names) {
+  taxa_names <- names(abund)[names(abund) != "site"]
+  cwm <- list()
+  for (i in trait_names) {
+    trait_sub <- trait[, .SD, .SDcols = c("taxon", i)]
+    trait_sub <- trait_sub[match(taxa_names, taxon),]
+    
+    cwm[[i]] <-
+      abund[, apply(.SD, 1, function(x)
+        weighted.mean(trait_sub[[i]],
+                      w = x)),
+        .SDcols = !c("site"),
+        by = "site"]
+  }
+  cwm
+}
+
+
 # General helper functions ----
 
 ## Google search ----

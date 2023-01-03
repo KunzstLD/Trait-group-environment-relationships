@@ -21,6 +21,7 @@ trait_matrix_sub <- trait_matrix[, .SD, .SDcols = c("taxon",
                                                     "group",
                                                     "n_taxa_group",
                                                     "Region")]
+# saveRDS(trait_matrix_sub, file.path(path_cache, "trait_matrix_tpgs.rds"))
 trait_matrix_sub <- melt(trait_matrix_sub,
                          id.vars = c("taxon",
                                      "group",
@@ -52,12 +53,12 @@ mean_tps[trait %in% trait_names & mean_affinity >= 0.5 , ]
 mean_tps[mean_affinity >= 0.5, 
          defining_tc := paste(trait, collapse = ", "),
          by = c("Region", "group")]
-saveRDS(mean_tps,
-        file.path(path_cache, "mean_tps.rds"))
+# saveRDS(mean_tps,
+#         file.path(path_cache, "mean_tps.rds"))
 
 # Create an overview table
 # TODO: how to call Qmd documents?
-# Load Tables.RMD
+# Load Tables.Qmd
 # source(
 #   "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/TU_Trait_TPG_relationships/Tables.Qmd"
 # )

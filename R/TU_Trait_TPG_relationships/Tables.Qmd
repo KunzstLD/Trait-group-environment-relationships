@@ -41,6 +41,7 @@ source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relatio
 ```
 
 ```{r}
+#| column: screen-inset
 mean_tps <- readRDS(file.path(path_cache, "mean_tps.rds"))
 defining_traits <- unique(mean_tps[!is.na(defining_tc), .(Region, group, n_taxa_group, defining_tc)])
 defining_traits[mean_tps[trait == "sensitivity_organic",],

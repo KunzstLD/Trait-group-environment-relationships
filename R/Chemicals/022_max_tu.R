@@ -98,3 +98,35 @@ saveRDS(max_tu, file.path(path_cache, "max_tu.rds"))
 # )] %>% 
 #   .[order(-ecotox_data_av, -source), ] %>% 
 #   fwrite(., file.path(path_repo, "overview_pesticides_ecotox_data.csv"))
+
+# Plot
+# Overview over log max TU
+ggplot(max_tu, aes(x = Region, y = max_log_tu)) +
+  ggdist::stat_halfeye() +
+  geom_boxplot(
+    width = .2,
+    outlier.shape = NA
+  )+
+  labs(y = "Max Log TU") +
+  # stat_summary(fun = "mean", color = "forestgreen") +
+  theme_bw() +
+  theme(
+    axis.title = element_text(size = 16),
+    axis.text.x = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ),
+    axis.text.y = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ),
+    legend.position = "none",
+  )
+ggsave(
+  filename = file.path(path_paper,
+                       "Graphs",
+                       "max_tu_overview.png"),
+  width = 50,
+  height = 30,
+  units = "cm"
+)

@@ -11,11 +11,11 @@ results_cl <- readRDS(file.path(path_cache, "Results_clustering.rds"))
 # Manual assignment (can be changed later), for now lowest number of groups 
 gap <- readRDS(file.path(path_cache, "Gap_statistic_results.rds"))
 
-results_cl$California$optimal_nog <- min(unique(gap$California)) #12
-results_cl$Midwest$optimal_nog <- unique(gap$Midwest) # 15
-results_cl$Northeast$optimal_nog <- min(unique(gap$Northeast)) # 13
-results_cl$PN$optimal_nog <- min(unique(gap$PN)) # 10
-results_cl$Southeast$optimal_nog <- unique(gap$Southeast) #15
+results_cl$California$optimal_nog <- min(unique(gap$California)) #12 # visually 6 large clusters (cut at ~ 2.0)
+results_cl$Midwest$optimal_nog <- unique(gap$Midwest) #15 #5 (cut at ~1.9)
+results_cl$Northeast$optimal_nog <- min(unique(gap$Northeast)) #13 #6 (cut at ~1.9) 
+results_cl$PN$optimal_nog <- min(unique(gap$PN)) # 10 #6 (cut at ~ 1.9)
+results_cl$Southeast$optimal_nog <- unique(gap$Southeast) #15 #7 cut at ~ 1.9)
 
 # Dendrograms ----
 # Plot and save dendrograms
