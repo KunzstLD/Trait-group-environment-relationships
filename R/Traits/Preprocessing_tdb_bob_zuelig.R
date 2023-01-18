@@ -148,6 +148,9 @@ noa_trait_enhanced_subset[OTU_new == "Agnetina" & grepl("\\/", OTU), OTU_new := 
 # have similar trait profiles
 noa_trait_enhanced_subset[OTU_new == "Orthocladiinae", OTU_new := OTU]
 noa_trait_enhanced_subset[OTU_new == "Orthocladiinae", `:=`(Genus = OTU, OTU_new = OTU)]
+noa_trait_enhanced_subset[grep("\\?|group", OTU),
+                          c("OTU", "OTU_new", "Genus") := lapply(.SD, rm_strange_notations),
+                          .SDcols = c("OTU", "OTU_new", "Genus")]
 
 # All duplicates that are now present have the same trait profiles
 # Can thus be deleted

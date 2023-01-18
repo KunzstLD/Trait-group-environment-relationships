@@ -88,30 +88,38 @@ normalize_by_rowSum <- function(x,
 direct_agg <- function(trait_data,
                        non_trait_cols,
                        method,
-                       na.rm = TRUE) {
+                       na.rm = TRUE,
+                       on = "family") {
+  if (!on %in% c("genus", "family")) {
+    warning(paste("Aggregation to", on, "is not implemented yet"))
+  }
   # get names of trait columns
   pat <- paste0(non_trait_cols, collapse = "|")
-  trait_col <- grep(pat, names(trait_data), value = TRUE, invert = TRUE)
-
+  trait_col <-
+    grep(pat, names(trait_data), value = TRUE, invert = TRUE)
+  
   # aggregate to family-level
+  # & merge information on order back
   # subset so that no NA values occur in data
   # (otherwise all NA entries are viewed as a group &
   # aggregated as well)
-  agg_data <- trait_data[!is.na(family),
-    lapply(.SD, method, na.rm = na.rm),
-    .SDcols = trait_col,
-    by = "family"
-  ]
-
-  # merge information on order back
-  agg_data[trait_data,
-    `:=`(
-      order = i.order,
-      unique_id = i.unique_id
-    ),
-    on = "family"
-  ]
-  agg_data
+  if (on == "genus") {
+    agg_data <- trait_data[!is.na(genus),
+                           lapply(.SD, method, na.rm = na.rm),
+                           .SDcols = trait_col,
+                           by = on]
+    agg_data[trait_data, `:=`(family = i.family,
+                              order = i.order), on = on]
+    return(agg_data)
+  }
+  if (on == "family") {
+    agg_data <- trait_data[!is.na(family),
+                           lapply(.SD, method, na.rm = na.rm),
+                           .SDcols = trait_col,
+                           by = on]
+    agg_data[trait_data, order := i.order, on = on]
+    return(agg_data)
+  }
 }
 
 # Statistical (helper) functions ----
@@ -139,11 +147,11 @@ mycluster_hc <- function(x, k) {
 calc_cwm <- function(abund,
                      trait,
                      trait_names) {
-  taxa_names <- names(abund)[names(abund) != "site"]
+  taxa_names <- names(abund)[names(abund) != c("site")]
   cwm <- list()
   for (i in trait_names) {
     trait_sub <- trait[, .SD, .SDcols = c("taxon", i)]
-    trait_sub <- trait_sub[match(taxa_names, taxon),]
+    trait_sub <- trait_sub[match(taxa_names, taxon), ]
     
     cwm[[i]] <-
       abund[, apply(.SD, 1, function(x)
@@ -154,7 +162,6 @@ calc_cwm <- function(abund,
   }
   cwm
 }
-
 
 # General helper functions ----
 
@@ -180,7 +187,14 @@ load_data <- function(path, pattern, name_rm_pattern = NULL) {
   data
 }
 
+## Removing strange notations ----
+# E.g., in taxonomic nomenclature
+rm_strange_notations <- function(x){
+  sub("\\?| group", "", x)
+}
+
 # Plotting ----
+## Dendrograms ----
 fun_dendrog_pl <- function(hc,
                            optimal_nog,
                            labels,
