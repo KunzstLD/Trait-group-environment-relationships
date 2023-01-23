@@ -26,6 +26,9 @@ if (params$region == "Midwest") {
   midwest_abund <- read_xlsx("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Data/NoA/MSQA_Opt4_Comb_MV.xlsx")
   setDT(midwest_abund)
 
+  # What about these sites, different SCODES but same STAID? 
+  # midwest_abund[STAID %like% c("06808495|391114085205801|412911089540101"), ]
+  
   midwest_abund_lf <- melt(
     midwest_abund,
     id.vars = c(

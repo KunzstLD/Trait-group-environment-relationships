@@ -95,8 +95,9 @@ noa_traits[, taxonomic_level := fcase(
     is.na(genus) & is.na(family) & !is.na(order),
   "order"
 )]
-
-
+saveRDS(noa_traits, 
+       "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Data/NoA/CONUS_trait_db_preproc.rds")
+        
 # Trait matrix ----
 trait_names <-
   grep("feed|resp|size|locom|volt", names(noa_traits), value = TRUE)

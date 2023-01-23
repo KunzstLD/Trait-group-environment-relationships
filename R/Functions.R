@@ -53,28 +53,33 @@ completeness_trait_data <- function(x, non_trait_cols) {
 # All trait states of one trait are divided by their row sum
 # Hence, trait affinities are represented as "%" or ratios
 # this works for traits named: "groupingfeature_trait"
-normalize_by_rowSum <- function(x, 
-                                non_trait_cols, 
+# Use for data in wide format!
+normalize_by_rowSum <- function(x,
+                                non_trait_cols,
                                 na.rm = TRUE) {
   # get trait names & create pattern for subset
-  trait_names_pattern <- create_pattern_ind(x = x,
-                                            non_trait_cols = non_trait_cols)
-  
+  trait_names_pattern <- create_pattern_ind(
+    x = x,
+    non_trait_cols = non_trait_cols
+  )
+
   # loop for normalization (trait categories for each trait sum up to 1)
   for (cols in trait_names_pattern) {
     # get row sum for a specific trait
     x[, rowSum := apply(.SD, 1, sum, na.rm = na.rm),
-      .SDcols = names(x) %like% cols]
-    
+      .SDcols = names(x) %like% cols
+    ]
+
     # get column names for assignment
     col_name <- names(x)[names(x) %like% cols]
-    
+
     # divide values for each trait state by
     # the sum of trait state values
     x[, (col_name) := lapply(.SD, function(y) {
       y / rowSum
     }),
-    .SDcols = names(x) %like% cols]
+    .SDcols = names(x) %like% cols
+    ]
   }
   # del rowSum column
   x[, rowSum := NULL]
@@ -139,6 +144,83 @@ mycluster_hc <- function(x, k) {
   list(cluster = cutree(hclust(as.dist(x),
                                method = "ward.D2"),
                         k = k))
+}
+
+clustering_traits <- function(x, # data.frame or data.table
+                              fc_traits, # fuzzy coded traits
+                              q_traits, # quantiative traits
+                              taxa,
+                              k_max = 20) {
+  setDF(x)
+  # Add row.names
+  row.names(x) <- taxa
+
+  # Convert to ktab object
+  vec <- sub("\\_.*", "\\1", fc_traits)
+  blocks <- rle(vec)$lengths
+  prep_fuzzy_data <- prep.fuzzy(x[, fc_traits], blocks)
+  ktab <- ktab.list.df(list(
+    prep_fuzzy_data,
+    x[, q_traits, drop = FALSE]
+  ))
+  dist_mat <-
+    dist.ktab(ktab, type = c("F", "Q")) # check function description
+
+  # Estimate optimal number of groups
+  gap <- clusGap(
+    x = as.matrix(dist_mat),
+    FUN = mycluster_hc,
+    K.max = k_max,
+    B = 100
+  )
+  optimal_nog_gap <- maxSE(gap$Tab[, "gap"],
+    gap$Tab[, "SE.sim"],
+    method = "Tibs2001SEmax"
+  )
+  optimal_nog_silh <- NbClust(
+    diss = dist_mat,
+    distance = NULL,
+    min.nc = 2,
+    max.nc = k_max,
+    method = "ward.D2",
+    index = "silhouette"
+  )
+
+  # Actual clustering
+  # Creation of distance matrix & hierarchical cluster analysis
+  hc_taxa <- hclust(dist_mat, method = "ward.D2")
+  # Get labels of dendrogram
+  dend_label <- hc_taxa %>%
+    as.dendrogram() %>%
+    labels()
+
+  # save to list
+  results_cl <- list(
+    "distance_matrix" = dist_mat,
+    "hc_wardD2" = hc_taxa,
+    "labels_dendrogram" = dend_label,
+    "gap_statistic" = optimal_nog_gap,
+    "silhouette" = optimal_nog_silh$Best.nc
+  )
+}
+
+## Calculate mean trait profiles ----
+calc_mean_tps <- function(x,
+                          taxa_id) {
+  x <- melt(
+    x,
+    id.vars = c(taxa_id,
+                "group",
+                "n_taxa_group"),
+    value.name = "affinity",
+    variable.name = "trait"
+  )
+  mean_tps <- x[, .(mean_affinity = mean(affinity),
+                    n_taxa_group),
+                by = c("group", "trait")]
+  mean_tps
+  mean_tps <- unique(mean_tps)
+  mean_tps[, grouping_feature := sub("([a-z]{1,})(\\_)(.+)", "\\1", trait)]
 }
 
 ## Community weighted mean trait ----

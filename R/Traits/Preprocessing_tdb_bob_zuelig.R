@@ -1,7 +1,8 @@
 # Prepare Trait DB Bob Zuelig
 # traits are all binary coded and mutual exclusive
-noa_trait_enhanced <- fread(file.path(path_in, "NoA", "TraitsEnhancedExpandedV2.csv"),
-                            na.strings = c("NA", ""))
+noa_trait_enhanced <-
+  fread(file.path(path_in, "NoA", "TraitsEnhancedExpandedV2.csv"),
+        na.strings = c("NA", ""))
 # str(noa_trait_enhanced)
 # rowSums(noa_trait_enhanced[, .SD, .SDcols = patterns("locom.*")])
 # View(noa_trait_enhanced)
@@ -92,7 +93,7 @@ noa_trait_enhanced_subset <-
 noa_trait_enhanced_subset <-
   na.omit(noa_trait_enhanced_subset[, .SD, .SDcols = c("OTU", trait_cols)])
 
-# merge back taxonomy
+# Merge back taxonomy
 noa_trait_enhanced_subset[noa_trait_enhanced,
                           `:=`(
                             Phylum = i.Phylum,
@@ -102,6 +103,7 @@ noa_trait_enhanced_subset[noa_trait_enhanced,
                             Genus = i.Genus
                           ),
                           on = "OTU"]
+
 # Change colorder so that traits of a grouping feature are next to each other
 setcolorder(noa_trait_enhanced_subset,
             neworder = c(
@@ -113,22 +115,26 @@ setcolorder(noa_trait_enhanced_subset,
             ))
 
 # Handle ambiguous names in OTU
-noa_trait_enhanced_subset[, OTU_new := sub("(.+)(\\/)(.+)", "\\1",OTU)]
-noa_trait_enhanced_subset[, OTU_new := sub("(.+)(genus nr\\. )(.+)", "\\3", OTU_new)]
+noa_trait_enhanced_subset[, OTU_new := sub("(.+)(\\/)(.+)", "\\1", OTU)]
+noa_trait_enhanced_subset[, OTU_new := sub(
+  "(.+)(genus nr\\. )(.+)", "\\3",
+  OTU_new
+)]
 noa_trait_enhanced_subset[, OTU_new := sub(" genus.+", "", OTU_new)]
-noa_trait_enhanced_subset[, `:=`(
+noa_trait_enhanced_subset[grepl(" cf\\.", OTU_new), `:=`(
   OTU_new = sub("(.+)( cf\\.)(.+)", "\\3", OTU_new),
   Genus = sub("(.+)( cf\\.)(.+)", "\\3", OTU_new)
 )]
 
 # By cleaning some of the OTUs, duplicates are created. Check if these duplicates contain
 # the similar information
-duplicates <- noa_trait_enhanced_subset[duplicated(OTU_new), OTU_new]
+duplicates <-
+  noa_trait_enhanced_subset[duplicated(OTU_new), OTU_new]
 duplicates <- duplicates[duplicates != "Orthocladiinae"]
 # Orthocladiinae multiple times, exclude and check manually
 
 res_similarity <- list()
-for(i in duplicates) {
+for (i in duplicates) {
   comp_tp <-
     noa_trait_enhanced_subset[OTU_new == i, .SD, .SDcols = c(trait_cols, "OTU_new")] %>%
     .[, OTU_new := paste0(OTU_new, "_", 1:.N)] %>%
@@ -144,7 +150,9 @@ res_similarity <- unlist(res_similarity)
 res_similarity[res_similarity == 0]
 
 # Manual fixes
-noa_trait_enhanced_subset[OTU_new == "Agnetina" & grepl("\\/", OTU), OTU_new := "Paragnetina"]
+noa_trait_enhanced_subset[OTU_new == "Agnetina" &
+                            grepl("\\/", OTU), `:=`(OTU_new = "Paragnetina",
+                                                    Genus = "Paragnetina")]
 # have similar trait profiles
 noa_trait_enhanced_subset[OTU_new == "Orthocladiinae", OTU_new := OTU]
 noa_trait_enhanced_subset[OTU_new == "Orthocladiinae", `:=`(Genus = OTU, OTU_new = OTU)]
@@ -154,7 +162,10 @@ noa_trait_enhanced_subset[grep("\\?|group", OTU),
 
 # All duplicates that are now present have the same trait profiles
 # Can thus be deleted
-noa_trait_enhanced_subset <- noa_trait_enhanced_subset[!duplicated(OTU_new), ]
+noa_trait_enhanced_subset <-
+  noa_trait_enhanced_subset[!duplicated(OTU_new),]
+noa_trait_enhanced_subset <-
+  noa_trait_enhanced_subset[!OTU_new %in% c("Orthocladiinae genus A", "Orthocladiinae genus B"),]
 noa_trait_enhanced_subset[, OTU := NULL]
 
 # save

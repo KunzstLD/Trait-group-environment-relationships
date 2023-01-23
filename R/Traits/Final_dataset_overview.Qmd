@@ -66,7 +66,7 @@ path_data <-
 # Trait matrix with assigned and aggregated traits
 trait_matrix_final <- load_data(
     path = path_cache,
-    pattern = "trait\\_matrix\\_final.*",
+    pattern = "trait\\_matrix\\_final\\_.*",
     name_rm_pattern = "trait\\_matrix\\_final\\_"
 )
 trait_matrix_final <- rbindlist(trait_matrix_final, idcol = "Region", fill = TRUE)
@@ -86,12 +86,12 @@ trait_names <-
 
 ## Add toxicity data  ----
 tab_spear <-
-  fread(file.path(path_data, "sensitivity_values_SPEAR.csv"))
+  fread(file.path(path_in, "sensitivity_values_SPEAR.csv"))
 tab_spear[, Taxon := sub(" Gen\\. sp\\.| sp\\.| ssp\\.", "", Taxon)]
 tab_spear[Familie == "Stratiomyiidae", `:=`(Gattung = NA_character_,
                                             Familie = "Stratiomyidae",
                                             Taxon = "Stratiomyidae")]
-
+# saveRDS(tab_spear, file.path(path_cache, "tab_spear.rds"))
 # Overview toxicity values
 # Often only two to three values per order 
 # < 0 more sensitive than Daphnia magna
@@ -119,7 +119,7 @@ tab_spear[Familie == "Stratiomyiidae", `:=`(Gattung = NA_character_,
 # Direct merge
 # For sensitivity, only 50 to 60 taxa per Region have a value
 # trait_matrix_final[taxon %in% tab_spear$Taxon, .N, by = Region]
-trait_matrix_final[tab_spear, sensitivity_organic := Sensitivität,
+trait_matrix_final[tab_spear, sensitivity_organic := i.Sensitivität,
   on = c(taxon = "Taxon")
 ]
 
@@ -190,7 +190,7 @@ trait_matrix_final[tm_final_remain,
                    sensitivity_organic := i.sensitivity_organic,
                    on = "taxon"]
 
-# For Diptera, according to Liana and Matthias:
+# For Diptera, according to Liana and Matthias (personal communication):
 # Der Wert -0.35 gilt dennoch mit Ausnahme von:
 # Chironomidae -0.39 
 # Culicidae  -0.29 

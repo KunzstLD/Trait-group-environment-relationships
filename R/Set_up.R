@@ -53,7 +53,7 @@ path_paper <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-
 source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/Functions.R")
 
 ## North American harmonised trait dataset
-# Will be needed in every data processing script
+# TODO: necessary to load this?
 noa_traits <- readRDS(file.path(path_in, "NoA", "Traits_US_LauraT_pp_harmonized.rds"))
 noa_traits[, taxon := coalesce(species, genus, family, order)]
 noa_traits <- noa_traits[, .SD,

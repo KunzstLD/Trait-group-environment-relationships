@@ -29,6 +29,12 @@ meta_rsqa_cmax[ecotox_important_pc,
 rsqa_cmax <- readRDS(file.path(path_cache, "rsqa_cmax_preproc.rds"))
 rsqa_cmax[meta_rsqa_cmax[ecotox_data_av == "Yes",], lc50_ug_l := i.lc50_ug_l, on = c(cas = "CASRN")]
 
+# These sites (PN and Midwest) have no chemical information
+# rsqa_cmax[TSITE_NO_WQ %in% c("T12073525",
+#                              "T03611200",
+#                              "T03318800",
+#                              "T393247089260701"),]
+
 # Occr. pesticides overall 
 rsqa_cmax[cmax > 0, n_occr_pesticide := .N, by = "pesticide"]
 rsqa_cmax[, n_occr_pesticide := n_occr_pesticide/n_sites]
