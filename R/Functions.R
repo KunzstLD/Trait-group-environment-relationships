@@ -245,6 +245,225 @@ calc_cwm <- function(abund,
   cwm
 }
 
+## XGBOOST ----
+
+# XGBOOST with train/val/test framework
+# split ratio for train/test split
+# features are the variables used
+# threads is the number of CPUs used for parallelization
+# id for naming each task
+perform_xgboost <- function(x,
+                            split_ratio = 0.8,
+                            features,
+                            id,
+                            threads = 4) {
+  set.seed(1234)
+
+  # Split in train and test data
+  ind <- sample(1:nrow(x), size = round(nrow(dat) * split_ratio))
+  train <- x[ind[[1]], ]
+  test <- x[-ind[[1]], ]
+
+  # Create tasks
+  task_train <- TaskRegr$new(
+    id = paste0(id, "_train"),
+    backend = train[, .SD, .SDcols = c(
+      features,
+      "max_log_tu"
+    )],
+    target = "max_log_tu"
+  )
+
+  # Learner
+  xgboost_learner <- lrn(
+    "regr.xgboost",
+    objective = "reg:squarederror",
+    # eval_metric = "rmse",
+    # evaluation for validation data set
+    gamma = to_tune(p_dbl(lower = 0, upper = 10)),
+    # Minimum loss reduction required to make a
+    # further partition on a leaf node.
+    # The larger, the more conservative the algorithm will be
+    lambda = to_tune(p_dbl(lower = 0, upper = 10)),
+    # shrinks features without removing them, L2 regularization
+    booster = "gbtree",
+    eta = to_tune(p_dbl(lower = 0.001, upper = 1)),
+    # controlling the learning rate
+    # (scaling of the contrib. of each tree by a factor 0-1 when added)
+    # to prevent overfitting,
+    # low values means more nrounds
+    # (robust to overfitting but also slower to compute)
+    max_depth = to_tune(p_int(lower = 2L, upper = 15L)),
+    subsample = to_tune(p_dbl(lower = 0.1, upper = 1)),
+    nrounds = to_tune(p_int(lower = 10, upper = 100)),
+    # number of boosting rounds
+    predict_type = "response"
+  )
+
+  # Parallelization
+  set_threads(xgboost_learner, n = threads)
+
+  # Tuning
+  instance <- tune(
+    method = tnr("irace"),
+    task = task,
+    learner = xgboost_learner,
+    resampling = rsmp("cv", folds = 3),
+    measures = msr("regr.rmse"), # evaluation performance of training data
+    terminator = trm("evals", n_evals = 1000)
+  )
+
+  # Train xgboost on train dataset with optimized parameters
+  # Check model as well on test dataset
+  xgboost_tuned <- lrn("regr.xgboost", id = "Xgboost tuned")
+  xgboost_tuned$param_set$values <- instance$result_learner_param_vals
+  xgboost_tuned$train(task_train)
+  pred_train <- xgboost_tuned$predict_newdata(newdata = train)$score(mlr3::msr("regr.rmse"))
+  pred_test <- xgboost_tuned$predict_newdata(newdata = test)$score(mlr3::msr("regr.rmse"))
+
+  # Retrieve most imp. variable
+  most_imp_vars <- xgboost_tuned$importance()
+
+  # Return
+  list(
+    "pred_train" = pred_train,
+    "pred_test" = pred_test,
+    "importance" = most_imp_vars,
+    "instance" = instance,
+    "final_model" = xgboost_tuned
+  )
+}
+
+# XGBOOST with nested resampling to evaluate model performance
+# TODO: 
+# - Generalize for different input data
+# - Don't use a loop
+# perform_xgboost_nestedresamp <- function(x) {
+#   for (region in names(x)) {
+#     set.seed(1234)
+
+#     # Data
+#     dat <- x[[region]]
+#     dat <-
+#       dcast(dat, site + max_log_tu ~ trait, value.var = "cwm_val")
+
+#     # Task
+#     task <- TaskRegr$new(
+#       id = region,
+#       backend = dat[, .SD, .SDcols = c(
+#         trait_names,
+#         "max_log_tu"
+#       )],
+#       target = "max_log_tu"
+#     )
+#     # Learner
+#     xgboost_learner <- lrn(
+#       "regr.xgboost",
+#       objective = "reg:squarederror",
+#       # for the learning task
+#       # eval_metric = "rmse",
+#       # evaluation for test data set
+#       gamma = to_tune(p_dbl(lower = 0, upper = 10)),
+#       # Minimum loss reduction required to make a further partition on a leaf node.
+#       # The larger, the more conservative the algorithm will be
+#       booster = "gbtree",
+#       eta = to_tune(p_dbl(lower = 0.001, upper = 0.3)),
+#       # controlling the learning rate (scaling of the contrib. of each tree by a factor 0-1 when added)
+#       # to prevent overfitting, low values means more nrounds (robust to overfitting but also slower to compute)
+#       max_depth = to_tune(p_int(lower = 2L, upper = 15L)),
+#       subsample = to_tune(p_dbl(lower = 0.1, upper = 1)),
+#       nrounds = to_tune(p_int(lower = 10, upper = 100)),
+#       # number of boosting rounds
+#       predict_type = "response"
+#     )
+
+#     # Tuning
+#     instance <- tune(
+#       method = tnr("irace"),
+#       task = task,
+#       learner = xgboost_learner,
+#       resampling = rsmp("cv", folds = 3),
+#       measures = msr("regr.rmse"), # evaluation performance of training data
+#       terminator = trm("evals", n_evals = 1000)
+#     )
+#     archive_ls[[region]] <- instance$archive
+
+#     # Final Model
+#     xgboost_tuned <- lrn("regr.xgboost", id = "Xgboost tuned")
+#     xgboost_tuned$param_set$values <- instance$result_learner_param_vals
+#     xgboost_tuned$train(task)
+#     model_ls[[region]] <- xgboost_tuned$model
+
+#     # TODO: Model performance with nested resampling
+#     # We could use nested resampling to evaluate the model performance
+#     # Nested resampling is an additional step after fitting the final model and should not
+#     # be used to find optimal hyperparameters.
+#     # Idea: If the same data for model selection and evaluation of the model is used, we bias the
+#     # performance estimate (eval. on test data could leak information about the test data's structure into
+#     # the model)
+#     # Steps:
+#     # - outer resampling: cv to get different testing an training datasets
+#     # - inner resampling: Within the training data use cv to get different inner testing and training data sets
+#     # - Tuning the hyperparameters with the inner data splits
+#     # - Fits learner on the outer training data set with the tuned hyperparameters from the inner resampling
+#     # - Evaluates the performance of the learner on the outer testing data
+#     # - Repeat inner resampling + fitting + evaluation for all folds of the outer resampling
+#     # - Aggregate perfromance values to get an unbiased performance estimate
+#     # Could also use a auto tuner with a different number of cv
+#     # at <- auto_tuner(
+#     #   method = tnr("grid_search", resolution = 20),
+#     #   learner = xgboost_learner,
+#     #   resampling = rsmp("cv", folds = 3),
+#     #   # for inner resampling
+#     #   measure = msr("regr.rmse"),
+#     #   terminator = trm("none"),
+#     # )
+
+#     # outer_resampling <- rsmp("cv", folds = 3)
+#     # rr <- resample(task,
+#     #                at,
+#     #                outer_resampling,
+#     #                store_models = TRUE) # investigate inner tuning with store models set to TRUE
+#     # rr$predictions()
+
+#     # perfor_ls[[region]] <- list(
+#     #   "perform_inner_rsmp" = extract_inner_tuning_results(rr),
+#     #   # Performance results on the inner resampling
+#     #   # These values should not be used to fit a final model
+#     #   "perform_full_archive" = extract_inner_tuning_archives(rr),
+#     #   # Full tuning archive, check if hyperparameters converge?
+#     #   "perform_outer_resamp" = rr$score(),
+#     #   # Outer resampling performance results
+#     #   # Only problematic if there's a huge difference between outer and inner resampling
+#     #   "agg_perform_outer_rsmp" = rr$aggregate()
+#     #   # Aggregated performance of the outer resampling should be reported (unbiased with optimal
+#     #   # hyperparameters)
+#     # )
+
+#     # # Interpret model
+#     # xgboost_exp <- explain_mlr3(
+#     #   xgboost_tuned,
+#     #   data     = dat[, .SD, .SDcols = trait_names],
+#     #   y        = dat$max_log_tu,
+#     #   label    = "XGBOOST",
+#     #   colorize = FALSE
+#     # )
+
+#     # # Variable importance
+#     # # Uses mean dropout loss for xgboost?
+#     # imp_ls[[region]] <-
+#     #   list(
+#     #     "permutation_imp" = model_parts(xgboost_exp,
+#     #                                     B = 50,
+#     #                                     loss_function = loss_root_mean_square),
+#     #     "model_imp" = xgboost_tuned$importance()
+#     #   )
+
+#     # PDPs
+#     # pdp_ls[[region]] <- model_profile(xgboost_exp)$agr_profiles
+#   }
+# }
+
 # General helper functions ----
 
 ## Google search ----
