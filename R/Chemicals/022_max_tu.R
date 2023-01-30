@@ -1,7 +1,7 @@
-# _________________________________________________________________________________________________
+# ________________________
 # MaxTU calculations ----
 # Also provide overview over toxicity data
-# _________________________________________________________________________________________________
+# ________________________
 
 ## Add ecotox info ----
 # Final list of ecotox_test data  
@@ -27,8 +27,10 @@ meta_rsqa_cmax[ecotox_important_pc,
 # Cmax data preprocessed
 # Add lc50 of most sensitive organism
 rsqa_cmax <- readRDS(file.path(path_cache, "rsqa_cmax_preproc.rds"))
-rsqa_cmax[meta_rsqa_cmax[ecotox_data_av == "Yes",], lc50_ug_l := i.lc50_ug_l, on = c(cas = "CASRN")]
-
+rsqa_cmax[meta_rsqa_cmax[ecotox_data_av == "Yes", ],
+  lc50_ug_l := i.lc50_ug_l,
+  on = c(cas = "CASRN")
+]
 # These sites (PN and Midwest) have no chemical information
 # rsqa_cmax[TSITE_NO_WQ %in% c("T12073525",
 #                              "T03611200",
@@ -37,7 +39,7 @@ rsqa_cmax[meta_rsqa_cmax[ecotox_data_av == "Yes",], lc50_ug_l := i.lc50_ug_l, on
 
 # Occr. pesticides overall 
 rsqa_cmax[cmax > 0, n_occr_pesticide := .N, by = "pesticide"]
-rsqa_cmax[, n_occr_pesticide := n_occr_pesticide/n_sites]
+rsqa_cmax[, n_occr_pesticide := n_occr_pesticide / n_sites]
 
 ## Calculate max TU ----
 rsqa_cmax[cmax > 0 &
@@ -46,6 +48,128 @@ rsqa_cmax[cmax > 0 &
           by = "TSITE_NO_WQ"]
 rsqa_cmax[, max_log_tu := max(log_tu, na.rm = TRUE), by = "TSITE_NO_WQ"]
 setnames(rsqa_cmax, "Region/Chemname", "Region")
+# PCA_chem.R
+
+# Unexpectedly low and high TU values
+check_low_tu <- rsqa_cmax[max_log_tu <= -5, .(
+  Region,
+  TSITE_NO_WQ,
+  cas,
+  pesticide, 
+  cmax,
+  lc50_ug_l,
+  log_tu,
+  max_log_tu
+)] %>%
+  .[max_log_tu == log_tu, ] %>% 
+  .[order(Region), ] 
+
+
+# check_high_tu <- rsqa_cmax[max_log_tu > 1, .(
+#   Region,
+#   TSITE_NO_WQ,
+#   cas,
+#   pesticide,
+#   cmax,
+#   lc50_ug_l,
+#   log_tu,
+#   max_log_tu
+# )] %>%
+#   .[max_log_tu == log_tu, ] %>% 
+#   .[order(Region), ]
+# saveRDS(check_high_tu, file.path(path_cache, "high_tu.rds"))
+
+# ## Check ecotox info ----
+
+# # Full list
+# meta_rsqa_cmax[CASRN %in% check_low_tu[lc50_ug_l >= 10000, cas], ]
+# meta_rsqa_cmax[CASRN %in% check_high_tu[, cas], ]
+
+# # merge ecotox info 
+# check_low_tu[meta_rsqa_cmax, `:=`(
+#   taxon_most_sensitive = i.taxon_most_sensitive,
+#   source = i.source
+# ),
+# on = c("cas" = "CASRN")
+# ]
+# saveRDS(check_low_tu, file.path(path_cache, "low_tu.rds"))
+# check_high_tu[meta_rsqa_cmax, `:=`(
+#   taxon_most_sensitive = i.taxon_most_sensitive,
+#   source = i.source
+# ),
+# on = c("cas" = "CASRN")
+# ]
+# saveRDS(check_high_tu, file.path(path_cache, "high_tu.rds"))
+# fwrite(
+#   check_low_tu[order(Region, cas), ],
+#   file.path(path_out, "pesticides_tu_below_minus5.csv")
+# )
+
+# Check substances were lc is below 1
+# meta_rsqa_cmax[lc50_ug_l <= 1, .(
+#   CASRN,
+#   Chemname,
+#   Parent_Degradate,
+#   Pesticide_use_group,
+#   lc50_ug_l,
+#   taxon_most_sensitive,
+#   source
+# )] %>% 
+# saveRDS(., file.path(path_cache, "pesticides_lc_50_below_1.rds"))
+# fwrite(., file.path(path_out, "pesticides_lc50_below_1_µg_L.csv"))
+
+
+## standartox
+# ecotox <- readRDS(file.path(path_cache, "ecotox.rds"))
+# # ecotox_aggr <- ecotox$aggregated
+# # ecotox_aggr[, tax_all := NULL]
+# ecotox_subset <- ecotox$filtered
+# ecotox_subset[concentration_unit == "ul/l",
+#               `:=`(concentration = concentration *
+#                      1000,
+#                    concentration_unit = "ug/l")] # (10^-6 * 10^3)/10^3
+
+# ecotox_subset <- ecotox_subset[concentration_unit %in% c("ppb", "ug/l"), ]
+# ecotox_subset[
+#   cas %in% check_low_tu[lc50_ug_l >= 10000, cas],
+#   .(
+#     cname, 
+#     cas,
+#     exposure,
+#     endpoint,
+#     concentration,
+#     concentration_unit,
+#     concentration_orig,
+#     concentration_unit_orig,
+#     tax_taxon
+#   )
+# ]
+
+# ## Ceriodaphnia dubia has a super low lc50 value
+# ## with a strange unit
+# ecotox_subset[
+#   cas %in% check_high_tu[, cas],
+#   .(
+#     cname, 
+#     cas,
+#     exposure,
+#     endpoint,
+#     concentration,
+#     concentration_unit,
+#     concentration_orig,
+#     concentration_unit_orig,
+#     tax_taxon
+#   )
+# ]
+
+# # PPDB
+# ppdb_queried <- fread(file.path(path_in, "Chemicals", "PPDB_queried.csv"))
+# setnames(ppdb_queried, "Source/Quality", "taxon_most_sensitive")
+# ppdb_queried[meta_rsqa_cmax, `:=`(Parent_Degradate = i.Parent_Degradate,
+#                                Pesticide_use_group = i.Pesticide_use_group), 
+#              on = c(cas = "CASRN")]
+# ppdb_queried[, source := "PPDB"]
+# ppdb_queried[cas %in% check_low_tu[lc50_ug_l >= 30000, cas], ]
 
 # For 2 sites where only 2-Hydroxyatrazine has been detected we cannot calculate a log TU
 # rsqa_cmax[cmax > 0 & !TSITE_NO_WQ %in% rsqa_cmax[max_log_tu == log_tu, TSITE_NO_WQ], ]
@@ -74,13 +198,17 @@ ggplot(max_tu, aes(x = max_log_tu)) +
 # Hmisc::describe(max_tu)
 
 # Sites with no pesticides detected or no where no ecotox info could be assigned
-# Assign -1 TU than the site with lowest pesticide toxicity (per Region)
+# Assign -5, likewise assign -5 for all pesticides with max_log_tu < -5 
 max_tu <- rbind(max_tu,
-                unique(rsqa_cmax[is.infinite(max_log_tu), .(TSITE_NO_WQ, Region, max_log_tu)]),
-                fill = TRUE)
-max_tu[is.infinite(max_log_tu), max_log_tu := NA_real_]
-max_tu[, min_log_tu_region := min(max_log_tu, na.rm = TRUE), by = "Region"]
-max_tu[is.na(max_log_tu), max_log_tu := min_log_tu_region - 1]
+  unique(rsqa_cmax[is.infinite(max_log_tu), .(
+    TSITE_NO_WQ,
+    Region,
+    max_log_tu
+  )]),
+  fill = TRUE
+)
+max_tu[is.infinite(max_log_tu), max_log_tu := -5]
+max_tu[max_log_tu < -5, max_log_tu := -5]
 saveRDS(max_tu, file.path(path_cache, "max_tu.rds"))
 
 # Table for Co-Authors ecotox data

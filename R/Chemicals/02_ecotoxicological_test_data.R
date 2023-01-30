@@ -1,6 +1,6 @@
-# _________________________________________________________________________________________________
+# ____________________________________________
 # Match ecotoxicological test information ----
-# _________________________________________________________________________________________________
+# ____________________________________________
 
 ## Load data ----
 # Pesticide cmax concentration for pesticides and degradates 
@@ -83,11 +83,15 @@ ecotox_subset <- ecotox$filtered
 ecotox_subset[concentration_unit == "ul/l",
               `:=`(concentration = concentration *
                      1000,
-                   concentration_unit = "ug/l")]
+                   concentration_unit = "ug/l")] # (10^-6 * 10^3)/10^3
+
+# Value for Methomyl too high?
+ecotox_subset[cas == "16752-77-5", concentration := 0.1]
 
 # After filtering 83 substances remain 
 ecotox_subset <- ecotox_subset[concentration_unit %in% c("ppb", "ug/l"), ]
 # ecotox_subset$cas %>% unique()
+
 
 ## Most sensitive Taxon ---- 
 # We identify now the taxon with the lowest LC50 for a given pesticide
@@ -157,6 +161,7 @@ lc50 <- rbind(lc50, ppdb_queried[, .(pesticide,
 # TODO: Search for I and F Degradates -> check Registration documents
 ecotox_info_missing <- fread(file.path(path_repo, "ecotox_info_missing.csv"))
 ecotox_info_missing[Availability_aq_life_bm == "Yes", source := "USEPA_Reg_doc"]
+#ecotox_info_missing[pesticide == "Fipronil amide", ]
 
 # Final list of ecotox test values for now
 lc50 <-

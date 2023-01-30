@@ -69,7 +69,7 @@ rsqa_cmax_lf <- melt(rsqa_cmax,
 
 # Rm Cmax for plotting
 rsqa_cmax_lf[, pesticide := sub("\\_Cmax", "", pesticide)]
-rsqa_cmax_lf[pesticide == "Aldicarb", max(cmax), by = "Region.x"]
+# rsqa_cmax_lf[pesticide == "Aldicarb", max(cmax), by = "Region.x"]
 
 # Name corrections 
 # Check which chemical names do not match with standartox 
@@ -102,7 +102,7 @@ rsqa_cmax_lf[pesticide == "TPM", pesticide := "Thiophanatemethyl"] #?
 # Fentin chloride - biozide, molluscicide 
 # catal$cname$variable[catal$cname$variable %like% "fentin"]
 # catal$cname$variable[catal$cname$variable %like% "fentinhydroxid"]
-saveRDS(rsqa_cmax_lf, file = file.path(data_cache, "rsqa_cmax_lf.rds"))
+saveRDS(rsqa_cmax_lf, file = file.path(path_cache,"rsqa_cmax_lf.rds"))
 ```
 
 ```{r}
