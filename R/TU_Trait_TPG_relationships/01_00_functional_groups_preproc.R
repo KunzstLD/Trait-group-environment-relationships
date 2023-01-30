@@ -180,8 +180,6 @@ trait_family[family_subset, sensitivity_organic := i.sensitivity_organic,
   on = "family"
 ]
 
-trait_family[family %in% c("Culicidae", "Ephydridae"), ]
-
 # 101 families of 133 possible (76 %)
 trait_family <- na.omit(trait_family)
-saveRDS(trait_family, file.path(path_cache, "trait_family.rds"))
+# saveRDS(trait_family, file.path(path_cache, "trait_family.rds"))

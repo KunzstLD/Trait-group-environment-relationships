@@ -32,7 +32,7 @@ results_cl <- list(
 saveRDS(results_cl, file.path(path_cache, "results_cl"))
 
 # Cophenetic distance ----
-# Relatively low for both (0.55, 0.58)
+# Relatively low for both (0.55, 0.56)
 cor(results_genera_cl$distance_matrix,
     cophenetic(results_genera_cl$hc_wardD2))
 cor(results_family_cl$distance_matrix,
@@ -45,7 +45,7 @@ cor(results_family_cl$distance_matrix,
 #  - TODO: How to decide -> based on Dendrogram?
 #  - Could try different numbers: 10, 12, ...?
 # Family-lvl:
-#  - Gap statistic: 10, silhouette: 20
+#  - Gap statistic: 15, silhouette: 20
 #  - TODO Check trait profiles
 dendrograms <- list()
 for (i in names(results_cl)) {

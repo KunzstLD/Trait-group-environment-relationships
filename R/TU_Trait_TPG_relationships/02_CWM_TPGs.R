@@ -36,6 +36,9 @@ trait_matrix_lf <- melt(
 # Match trait data
 abund <- readRDS(file.path(path_cache, "total_abund_CEOPT.rds"))
 
+# Few taxa cannot be considered (see also trait matching section)
+# unique(abund[!family %in% trait_matrix$family, family])
+
 # Some STAID of Midwest are duplicates, though the sites are different
 # Taken care of in merge with ecotox data 
 # abund[!is.na(STAID), .(.N, site), by = "STAID"] %>% 
@@ -61,18 +64,6 @@ abund_wf <- lapply(abund_ls, function(y)
         abundance)] %>%
     dcast(., site ~ taxon, value.var = "abundance"))
 
-# Taxa with unrealistic high abundance, probably multiplication error:
-# library(ggbeeswarm)
-# ggplot(abund, aes(x = Region,
-#                   y = log(abundance+1))) +
-#   geom_quasirandom()
-# abund[Region == "California" & log(abundance + 1) > 10,] %>%
-#   fwrite(.,
-#          file = "/home/kunzst/Schreibtisch/CA_ext_high_abundances.csv")
-rm_site <-
-  unique(abund[Region == "California" &
-                 log(abundance + 1) > 10, site])
-abund_wf$California <- abund_wf$California[site != rm_site, ]  
 
 ## Calc cwm for each trait ----
 data_cwm <- Map(

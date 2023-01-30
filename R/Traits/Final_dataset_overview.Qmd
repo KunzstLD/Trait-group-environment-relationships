@@ -274,6 +274,19 @@ abund <- abund[order %in% c("Coleoptera",
                             "Odonata",
                             "Plecoptera",
                             "Trichoptera"), ]
+
+# Taxa with unrealistic high abundance, probably multiplication error:
+# library(ggbeeswarm)
+# ggplot(abund, aes(x = Region,
+#                   y = log(abundance+1))) +
+#   geom_quasirandom()
+# abund[Region == "California" & log(abundance + 1) > 10,] %>%
+#   fwrite(.,
+#          file = "/home/kunzst/Schreibtisch/CA_ext_high_abundances.csv")
+rm_site <-
+  unique(abund[Region == "California" &
+                 log(abundance + 1) > 10, site])
+abund <- abund[site != rm_site, ] 
 # saveRDS(abund, file.path(path_cache, "total_abund_CEOPT.rds"))
 
 # abund[, summary(perc_occr_at_sites), by = Region]

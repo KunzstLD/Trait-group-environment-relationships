@@ -1,213 +1,152 @@
-# __________________________________________________________________________________________________
+# ________________________________________________________
 # Boosted Regression trees
 # Resources for mlr3 with xgboost:
 # https://github.com/KI-Research-Institute/LearningWithExternalStats/blob/f6ead01200c2a85ac0d8e5c67f0d99a7061eabb2/extras/mlWrappers/wxgboost.R
 # https://mlr3book.mlr-org.com/performance.html
-
-# TODO, read on cross validation
+# cross validation:
 # https://machinelearningmastery.com/k-fold-cross-validation/
 # And on boosting parameters (e.g. understand nrounds better)
 # Variable importance in boosting
-# __________________________________________________________________________________________________
+# ________________________________________________________
 
+# Data preprocessing ----
 # CWM values & TU data
 data_cwm <- readRDS(file.path(path_cache, "data_cwm.rds"))
 max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
+setnames(max_tu, "TSITE_NO_WQ", "site")
 
 # Combine max tu and cwm for each region
-data_cwm <- lapply(data_cwm, function(y)
-  y[max_tu, max_log_tu := i.max_log_tu, on = c(site = "TSITE_NO_WQ")])
+# make an exception for Midwest (merge via STAID)
+data_cwm <- lapply(data_cwm, function(y) {
+  on <- if("STAID" %in% names(y)) c("STAID" = "site") else "site"
+  y[max_tu, max_log_tu := i.max_log_tu, on = on]
+})
 
-# TODO: Site T12073525 does not exist in chemical data
-# max_tu[TSITE_NO_WQ %like% "T12073525", ]
-data_cwm$PN <- data_cwm$PN[site != "T12073525",]
+# There are sites that don't have chemical data
+# lapply(data_cwm, function(y)
+#   y[is.na(max_log_tu), ])  
+# Few sites from Midwest:
+# unique(data_cwm$Midwest[is.na(max_log_tu), STAID])
+# T03611200, T03318800, T393247089260701
+# and PN: T12073525
+# unique(data_cwm$PN[is.na(max_log_tu), site])
 
-# Trait names
-trait_names <-
-  grep("feed.*|resp.*|locom.*|size.*|volt.*|sensitivity.*",
-       names(dat),
-       value = TRUE)
-# dat <- data_cwm$California
-# dat <- dcast(dat, site + max_log_tu ~ trait, value.var = "cwm_val")
+# Remove sites with no chemical information 
+# Note to Ian that there were some duplicate STAID (but different sites)
+# for Midwest and that for three sites max_log_tu could not be matched
+# max_tu[site %like% "T12073525", ]
+# data_cwm$PN[site == "T12073525",]
+data_cwm$Midwest <- data_cwm$Midwest[!is.na(max_log_tu), ]
+data_cwm$PN <- data_cwm$PN[!is.na(max_log_tu),]
 
-## Boosting ----
-perfor_ls <- list()
-plot_ls <- list()
-imp_ls <- list()
-model_ls <- list()
+# Boosting ----
 
-for(region in names(data_cwm)[c(1,3:5)]) {
-  set.seed(1234)
-  
-  # Data
-  dat <- data_cwm[[region]]
-  dat <-
-    dcast(dat, site + max_log_tu ~ trait, value.var = "cwm_val")
-  
-  # Task
-  task <- TaskRegr$new(id = region,
-                       backend = dat[, .SD, .SDcols = c(trait_names,
-                                                        "max_log_tu")],
-                       target = "max_log_tu")
-  # Learner
-  xgboost_learner <- lrn(
-    "regr.xgboost",
-    objective = "reg:squarederror",
-    # for the learning task
-    eval_metric = 'rmse',
-    # evaluation for test data set
-    gamma = 10,
-    # Minimum loss reduction required to make a further partition on a leaf node.
-    # The larger, the more conservative the algorithm will be
-    booster = "gbtree",
-    eta = to_tune(p_dbl(lower = 0.001, upper = 0.3)),
-    # controlling the learning rate (scaling of the contrib. of each tree by a factor 0-1 when added)
-    # to prevent overfitting, low values means more nrounds (robust to overfitting but also slower to compute)
-    max_depth = 6L,
-    nrounds = to_tune(p_int(lower = 1, upper = 50)),
-    # number of boosting rounds
-    predict_type = "response"
+## Train/validation/test split approach ----
+# TODO: Check why importance values are not returned!
+trait_names <- unique(data_cwm$California$trait)
+res_xgboost <- list()
+
+for (region in names(data_cwm)) {
+  x <- dcast(data_cwm[[region]], site + max_log_tu ~ trait,
+    value.var = "cwm_val"
   )
-  
-  # Tuning
-  # use the auto_tuner function, no need to extract the best set of hyperparameters at the end
-  instance <- tune(
-    method = tnr("grid_search", resolution = 5),
-    task = task,
-    learner = xgboost_learner,
-    resampling = rsmp("cv", folds = 3),
-    measures = msr("regr.mse"),
-    terminator = trm("evals", n_evals = 5)
+  res_xgboost[[region]] <- perform_xgboost(
+    x = x,
+    features = trait_names,
+    id = region
   )
-  # instance$archive
-  # instance$result
-  
-  # Model performance with nested resampling
-  # We could use nested resampling to evaluate the model performance
-  # Nested resampling is an additional step after fitting the final model and should not
-  # be used to find optimal hyperparameters.
-  # Idea: If the same data for model selection and evaluation of the model is used, we bias the
-  # performance estimate (eval. on test data could leak information about the test data's structure into
-  # the model)
-  # Steps:
-  # - outer resampling: cv to get different testing an training datasets
-  # - inner resampling: Within the training data use cv to get different inner testing and training data sets
-  # - Tuning the hyperparameters with the inner data splits
-  # - Fits learner on the outer training data set with the tuned hyperparameters from the inner resampling
-  # - Evaluates the performance of the learner on the outer testing data
-  # - Repeat inner resampling + fitting + evaluation for all folds of the outer resampling
-  # - Aggregate perfromance values to get an unbiased perfromance estimate
-  # Could also use a auto tuner with a different number of cv
-  at <- auto_tuner(
-    method = tnr("grid_search", resolution = 5),
-    learner = xgboost_learner,
-    resampling = rsmp("cv", folds = 4),
-    # for inner resampling
-    measure = msr("regr.mse"),
-    terminator = trm("evals", n_evals = 5),
-  )
-  
-  outer_resampling <- rsmp("cv", folds = 3)
-  rr <- resample(task,
-                 at,
-                 outer_resampling,
-                 store_models = TRUE) # investigate inner tuning with store models set to TRUE
-  # rr$predictions()
-  
-  perfor_ls[[region]] <- list(
-    "perform_inner_rsmp" = extract_inner_tuning_results(rr),
-    # Performance results on the inner resampling
-    # These values should not be used to fit a final model
-    "perform_outer_resamp" = rr$score(),
-    # Outer resampling performance results
-    # Only problematic if there's a huge difference
-    "agg_perform_outer_rsmp" = rr$aggregate()
-    # Aggregated performance of the outer resampling should be reported (unbiased with optimal
-    # hyperparameters)
-  )
-  
-  ## Final Model ----
-  xgboost_learner$param_set$values <-
-    instance$result_learner_param_vals
-  xgboost_learner$train(task)
-  model_ls[[region]] <- xgboost_learner$model
-  
-  ## Interpret model ----
-  xgboost_exp <- explain_mlr3(
-    xgboost_learner,
-    data     = dat[, .SD, .SDcols = trait_names],
-    y        = dat$max_log_tu,
-    label    = "XGBOOST",
-    colorize = FALSE
-  )
-  
-  ### Variable importance ----
-  # Uses mean dropout loss for xgboost
-  imp_ls[[region]] <-
-    list(
-      "permutation_imp" = model_parts(xgboost_exp),
-      "model_imp" = xgboost_learner$importance()
-    )
-  
-  # Similar but not equal to the importance reported from the model
-  plot_ls[[region]] <-
-    list("plot_permutation_imp" = plot(model_parts(xgboost_exp))) 
-  
-  ### PDPs ----
-  # TODO:Might extend to PDPs and even further
-  # pdp <- model_profile(
-  #   xgboost_exp,
-  #   variables = c(
-  #     "locom_swim",
-  #     "feed_predator",
-  #     "size_medium",
-  #     "sensitivity_organic",
-  #     "size_large"
-  #   )
-  # )$agr_profiles
-  #
-  # plot(pdp) +
-  #   scale_y_continuous("Max Log TU") +
-  #   theme_bw()
-  
 }
-# TODO: Check performance values in detail
-# perfor_ls
-# model_ls
+lapply(res_xgboost, function(y) c(y$pred_train, y$pred_test)) %>%
+  saveRDS(., file.path(path_cache, "performance_xgboost_train_val_test.rds"))
 
-# Plots permutation importance
-plot_ls$California
-ggsave(
-  filename = file.path(path_out,
-                       "Graphs",
-                       "Most_imp_traits_California.png"),
-  width = 50,
-  height = 30,
-  units = "cm"
+summary_funs <- list(
+  "min" = min,
+  "max" = max,
+  "mean" = mean,
+  "median" = median
 )
 
-# Overview 5 most important traits  
-permutation_imp <- lapply(imp_ls, function(y) y$permutation_imp)
-most_imp_permutation_imp <- lapply(permutation_imp, function(y)
-  as.data.table(y) %>%
-    .[, .(mean_dropout_loss = mean(dropout_loss)), by = "variable"] %>%
-    .[!variable %in% c("_baseline_", "_full_model_"), ] %>%
-    .[order(-mean_dropout_loss), .SD[1:5, ]])
-most_imp_permutation_imp <- rbindlist(most_imp_permutation_imp, idcol = "region")
-most_imp_permutation_imp[, region_QA := fcase(
-  region == "California",
-  "CSQA",
-  region == "Northeast",
-  "NESQA",
-  region == "PN",
-  "PNSQA",
-  region == "Southeast",
-  "SESQA"
-)] # TODO: this needs to be standardized in all figures and tables
-most_imp_permutation_imp[, mean_dropout_loss := round(mean_dropout_loss, digits = 2)]
-setcolorder(most_imp_permutation_imp,
-            c("region", "region_QA"))
-fwrite(most_imp_permutation_imp,
-       file = file.path(path_paper,
-                        "Tables",
-                        "Most_imp_traits.csv"))
+## Nested resampling ----
+# perfor_ls$California$perform_full_archive[, lapply(summary_funs, function(f)
+#   f(regr.rmse))]
+# as.data.table(archive_ls$California)
+# saveRDS(perfor_ls, file.path(path_cache, "performance_brt_combined.rds"))
+# saveRDS(model_ls, file.path(path_cache, "model_summary_brt_combined.rds"))
+
+# TODO: regr. mean error still rel. high, why?
+# Seems to be a problem with the size of our data and the number of variables
+# -> If we do CV then get rmse between 2.5 and 3
+# Is there another way? If we train on the full dataset then we get
+# TODO Nested resampling
+# https://arxiv.org/pdf/2107.05847.pdf
+# https://www.tidymodels.org/learn/work/nested-resampling/
+
+# Plots permutation importance
+# TODO
+# - How to deal with correlation among variables
+# - Rather use Impurity?
+# https://christophm.github.io/interpretable-ml-book/feature-importance.html
+# saveRDS(imp_ls, file.path(path_cache, "variable_importance_brt_combined.rds"))
+
+
+# Plot indicates loss of original data, loss with permuted data, and results for 100 permutations
+# plot(imp_ls$California$permutation_imp)
+# # ggsave(
+# #   filename = file.path(path_out,
+# #                        "Graphs",
+# #                        "Most_imp_traits_California.png"),
+# #   width = 50,
+# #   height = 30,
+# #   units = "cm"
+# # )
+
+# # Overview 5 most important traits  
+# permutation_imp <- lapply(imp_ls, function(y) y$permutation_imp)
+# most_imp_permutation_imp <- lapply(permutation_imp, function(y)
+#   as.data.table(y) %>%
+#     .[, .(mean_dropout_loss = mean(dropout_loss)), by = "variable"] %>%
+#     .[!variable %in% c("_baseline_", "_full_model_"), ] %>%
+#     .[order(-mean_dropout_loss), .SD[1:5, ]])
+# most_imp_permutation_imp <- rbindlist(most_imp_permutation_imp, idcol = "region")
+# most_imp_permutation_imp[, region_QA := fcase(
+#   region == "California",
+#   "CSQA",
+#   region == "Northeast",
+#   "NESQA",
+#   region == "PN",
+#   "PNSQA",
+#   region == "Southeast",
+#   "SESQA"
+# )] # TODO: this needs to be standardized in all figures and tables
+# most_imp_permutation_imp[, mean_dropout_loss := round(mean_dropout_loss, digits = 2)]
+# setcolorder(most_imp_permutation_imp,
+#             c("region", "region_QA"))
+# fwrite(most_imp_permutation_imp,
+#        file = file.path(path_paper,
+#                         "Tables",
+#                         "Most_imp_traits.csv"))
+
+# # PDPs
+# saveRDS(pdp_ls, file.path(path_cache, "pdp_brt_combined.rds"))
+# plot(pdp_ls$California) +
+#   scale_y_continuous("Max Log TU") +
+#   theme_bw() +
+#   ggtitle("Partial Dependence profile California") +
+#   theme(
+#     axis.title = element_text(size = 16),
+#     axis.text.x = element_text(family = "Roboto Mono",
+#                                size = 14),
+#     axis.text.y = element_text(family = "Roboto Mono",
+#                                size = 14),
+#     strip.text = element_text(family = "Roboto Mono",
+#                               size = 14),
+#     legend.position = "none",
+#   )
+# ggsave(
+#   filename = file.path(path_out,
+#                        "Graphs",
+#                        "PDP_California.png"),
+#   width = 50,
+#   height = 35,
+#   units = "cm"
+# )
