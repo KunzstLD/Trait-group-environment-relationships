@@ -224,7 +224,6 @@ calc_mean_tps <- function(x,
 }
 
 ## Community weighted mean trait ----
-# relatively slow, could improve the loop?
 # TODO: transform abundances?
 calc_cwm <- function(abund,
                      trait,
@@ -244,6 +243,51 @@ calc_cwm <- function(abund,
   }
   cwm
 }
+# Test Code:
+# taxa_names <- names(abund_wf$California)[names(abund_wf$California) != "site"]
+# test_herbivore <-
+#   trait_matrix[Region == "California" &
+#                  taxon %in% names(abund_wf$California), .(taxon, feed_herbivore)]
+# test_herbivore <- test_herbivore[match(taxa_names, taxon) ]
+# abund_wf$California[, apply(.SD,
+#                             1,
+#                             function(x)
+#                               weighted.mean(test_herbivore$feed_herbivore, w = x)),
+#                     .SDcols = !c("site"),
+#                     by = "site"]
+
+
+## Community weighted sum trait ----
+# TODO: transform abundances?
+cws <- function(abund,
+         trait,
+         trait_names) {
+  taxa_names <- names(abund)[names(abund) != c("site")]
+  cws <- list()
+  for (i in trait_names) {
+    trait_sub <- trait[, .SD, .SDcols = c("taxon", i)]
+    trait_sub <- trait_sub[match(taxa_names, taxon), ]
+
+    cws[[i]] <-
+      abund[, apply(.SD, 1, function(x) {
+        sum(x * trait_sub[[i]])
+      }),
+      .SDcols = !c("site"),
+      by = "site"
+      ]
+  }
+  cws
+}
+# Test code
+# taxa_names <- names(abund_wf$California)[names(abund_wf$California) != c("site")]
+# trait_sub <- trait_matrix_ls$California[match(taxa_names, taxon), ]
+# all(names(abund_wf$California)[2:201] == trait_sub$taxon)
+
+# abund_wf$California[1:2, apply(
+#   .SD, 1,
+#   function(x) sum(x * trait_sub[["feed_filter"]])
+# ), .SDcols = !c("site")]
+
 
 ## XGBOOST ----
 
@@ -260,17 +304,20 @@ perform_xgboost <- function(x,
   set.seed(1234)
 
   # Split in train and test data
-  ind <- sample(1:nrow(x), size = round(nrow(dat) * split_ratio))
-  train <- x[ind[[1]], ]
-  test <- x[-ind[[1]], ]
+  ind <- sample(1:nrow(x), size = round(nrow(x) * split_ratio))
+  train <- x[ind, .SD, .SDcols = c(
+    features,
+    "max_log_tu"
+  )]
+  test <- x[-ind, .SD, .SDcols = c(
+    features,
+    "max_log_tu"
+  )]
 
   # Create tasks
   task_train <- TaskRegr$new(
     id = paste0(id, "_train"),
-    backend = train[, .SD, .SDcols = c(
-      features,
-      "max_log_tu"
-    )],
+    backend = train,
     target = "max_log_tu"
   )
 
@@ -306,7 +353,7 @@ perform_xgboost <- function(x,
   # Tuning
   instance <- tune(
     method = tnr("irace"),
-    task = task,
+    task = task_train,
     learner = xgboost_learner,
     resampling = rsmp("cv", folds = 3),
     measures = msr("regr.rmse"), # evaluation performance of training data
