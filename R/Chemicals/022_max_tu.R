@@ -23,6 +23,7 @@ meta_rsqa_cmax[ecotox_important_pc,
                  notes = i.Notes
                ),
                on = c(CASRN = "Cas_degradates")]
+# saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))
 
 # Cmax data preprocessed
 # Add lc50 of most sensitive organism
@@ -37,7 +38,7 @@ rsqa_cmax[meta_rsqa_cmax[ecotox_data_av == "Yes", ],
 #                              "T03318800",
 #                              "T393247089260701"),]
 
-# Occr. pesticides overall 
+# Occr. pesticides overall
 rsqa_cmax[cmax > 0, n_occr_pesticide := .N, by = "pesticide"]
 rsqa_cmax[, n_occr_pesticide := n_occr_pesticide / n_sites]
 
@@ -190,13 +191,6 @@ max_tu <- max_tu[, .(
   n_max_tu
 )]
 
-# Graphical overview of sites and max TU
-ggplot(max_tu, aes(x = max_log_tu)) +
-  geom_density() +
-  facet_wrap(. ~ Region) +
-  theme_bw()
-# Hmisc::describe(max_tu)
-
 # Sites with no pesticides detected or no where no ecotox info could be assigned
 # Assign -5, likewise assign -5 for all pesticides with max_log_tu < -5 
 max_tu <- rbind(max_tu,
@@ -209,7 +203,7 @@ max_tu <- rbind(max_tu,
 )
 max_tu[is.infinite(max_log_tu), max_log_tu := -5]
 max_tu[max_log_tu < -5, max_log_tu := -5]
-saveRDS(max_tu, file.path(path_cache, "max_tu.rds"))
+# saveRDS(max_tu, file.path(path_cache, "max_tu.rds"))
 
 # Table for Co-Authors ecotox data
 # meta_rsqa_cmax[rsqa_cmax[!is.na(n_occr_pesticide), ], 
@@ -264,3 +258,10 @@ ggsave(
   height = 30,
   units = "cm"
 )
+
+# Graphical overview of sites and max TU
+ggplot(max_tu, aes(x = max_log_tu)) +
+  geom_density() +
+  facet_wrap(. ~ Region) +
+  theme_bw()
+# Hmisc::describe(max_tu)

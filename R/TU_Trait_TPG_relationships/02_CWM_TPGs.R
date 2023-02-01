@@ -50,7 +50,6 @@ abund_ls <- Map(
   abund_ls,
   trait_matrix_ls
 )
-
 abund_wf <- lapply(abund_ls, function(y)
   y[, .(Region,
         site,
@@ -64,8 +63,7 @@ abund_wf <- lapply(abund_ls, function(y)
         abundance)] %>%
     dcast(., site ~ taxon, value.var = "abundance"))
 
-
-## Calc cwm for each trait ----
+## CWM ----
 data_cwm <- Map(
   function(x, y)
     calc_cwm(
@@ -77,21 +75,30 @@ data_cwm <- Map(
   trait_matrix_ls
 )
 
-# Test Code:
-# taxa_names <- names(abund_wf$California)[names(abund_wf$California) != "site"]
-# test_herbivore <-
-#   trait_matrix[Region == "California" &
-#                  taxon %in% names(abund_wf$California), .(taxon, feed_herbivore)]
-# test_herbivore <- test_herbivore[match(taxa_names, taxon) ]
-# abund_wf$California[, apply(.SD,
-#                             1,
-#                             function(x)
-#                               weighted.mean(test_herbivore$feed_herbivore, w = x)),
-#                     .SDcols = !c("site"),
-#                     by = "site"]
+# Community weighted sum trait ----
+# TODO For sensitivity organic values are negative
+data_cws <- Map(
+  function(x, y)
+    cws(
+      abund = x,
+      trait = y,
+      trait_names = trait_names
+    ),
+  abund_wf,
+  trait_matrix_ls
+)
+
+# Postprocessing
 data_cwm <- lapply(data_cwm, function(y) rbindlist(y, idcol = "trait"))
 data_cwm$Midwest[abund_ls$Midwest, STAID := i.STAID, on = "site"]
 data_cwm$Midwest[, STAID := sub("\"([0-9]{1,})\"", "\\1", STAID)]
 data_cwm$Midwest[, STAID := paste0("T", STAID)]
 data_cwm <- lapply(data_cwm, function(y) setnames(y, "V1", "cwm_val"))
 saveRDS(data_cwm, file.path(path_cache, "data_cwm.rds"))
+
+data_cws <- lapply(data_cws, function(y) rbindlist(y, idcol = "trait"))
+data_cws$Midwest[abund_ls$Midwest, STAID := i.STAID, on = "site"]
+data_cws$Midwest[, STAID := sub("\"([0-9]{1,})\"", "\\1", STAID)]
+data_cws$Midwest[, STAID := paste0("T", STAID)]
+data_cws <- lapply(data_cws, function(y) setnames(y, "V1", "cws_val"))
+saveRDS(data_cws, file.path(path_cache, "data_cws.rds"))

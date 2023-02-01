@@ -10,6 +10,8 @@ library(data.table)
 library(dplyr)
 library(readxl)
 library(purrr)
+library(zeallot)
+library(purrr)
 
 # Retrieval of taxonomic information
 library(taxize)
