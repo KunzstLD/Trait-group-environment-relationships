@@ -47,10 +47,8 @@ setnames(meta_rsqa_cmax,
 
 # Query standartox ----
 # Most sensitive organism:
-# It's not important to use LC50 data for the observed taxa.
-# Rather all available LC50 values for invertebrates are queried and then 
-# the lowest test value that can be found for a given substance is taken. 
-# This then represents the most sensitive organism (i.e. most sensitive is for each substance).
+# All available LC50 values for invertebrates are queried and then
+# the lowest test value that can be found for a given substance is taken.
 
 # Stx query:
 # Query for all substances including degradates
@@ -75,7 +73,40 @@ ecotox_subset <- ecotox$filtered
 # Through Standartox test data for 84 substances could be obtained 
 # length(unique(ecotox$filtered$cas))
 
-## Concentration unit ---- 
+# Few taxa are actually marine and need to be filtered out
+# marine_taxa <- wormsbynames(unique(ecotox_subset[, tax_taxon]))
+# saveRDS(marine_taxa, file.path(path_cache, "marine_taxa.rds"))
+marine_taxa <- readRDS(file.path(path_cache, "marine_taxa.rds"))
+setDT(marine_taxa)
+
+# 9 Taxa potentially only marine or brackish
+saline_taxa <- marine_taxa[, .(
+  scientificname,
+  status,
+  isMarine,
+  isBrackish,
+  isFreshwater,
+  isTerrestrial,
+  isExtinct
+)] %>%
+  .[!is.na(scientificname), ] %>%
+  .[
+    (isMarine == 1 | isBrackish == 1) & (isFreshwater == 0 | is.na(isFreshwater)),
+    scientificname
+  ]
+
+# RM Hydropsyche from the list (belongs to freshwater)
+saline_taxa <- saline_taxa[saline_taxa != "Hydropsyche"]
+ecotox_subset <- ecotox_subset[!tax_taxon %in% saline_taxa, ]
+
+## Manual corrections and unit conversions to standartox ----
+
+# Few taxa that are not freshwater remain
+# Apis mellifera
+# Eisenia fetida
+ecotox_subset <- ecotox_subset[!tax_taxon %in% c("Apis mellifera", "Eisenia fetida"), ]
+
+# Concentration unit
 # ppb; ug/l
 # ppb is equivalent to ug/L
 # Hmisc::describe(ecotox_subset[,.(concentration_unit)]) 
@@ -88,10 +119,40 @@ ecotox_subset[concentration_unit == "ul/l",
 # Value for Methomyl too high?
 ecotox_subset[cas == "16752-77-5", concentration := 0.1]
 
-# After filtering 83 substances remain 
-ecotox_subset <- ecotox_subset[concentration_unit %in% c("ppb", "ug/l"), ]
-# ecotox_subset$cas %>% unique()
+# Some pesticides queried from EPA ecotox DB have a unit error
+# Dimethoate (60-51-5) is in mg/L given in the original source
+# This value also appears in the Standartox list, but also 1.29 ug/L
+# TODO: ask Andi
+ecotox_subset[
+  cas == "60-51-5" & tax_taxon == "Chironomus dilutus",
+  `:=`(
+    concentration = 1290,
+    concentration_unit_orig = "mg/L"
+  )
+]
 
+# Methamidophos
+ecotox_subset[
+  cas == "10265-92-6" & tax_taxon == "Daphnia magna",
+  `:=`(
+    concentration = 34000,
+    concentration_unit_orig = "mg/L"
+  )
+]
+
+# Propiconazole has a strange study as source from the 1970s 
+# Removed all tests from this study
+ecotox_subset <- ecotox_subset[!(cas == "60207-90-1" & tax_taxon %in% c(
+  "Baetis rhodani",
+  "Gammarus lacustris",
+  "Physa fontinalis",
+  "Hydropsyche siltalai",
+  "Heptagenia sulphurea"
+)), ]
+
+# After filtering 60 substances remain
+ecotox_subset <- ecotox_subset[concentration_unit %in% c("ppb", "ug/l"), ]
+# unique(ecotox_subset$cas)
 
 ## Most sensitive Taxon ---- 
 # We identify now the taxon with the lowest LC50 for a given pesticide
@@ -123,11 +184,11 @@ lc50[meta_rsqa_cmax,
 lc50[, source := "standartox"]
 
 ## Missing test information ----
-# PPDB or Registration documents mentioned by Lisa Nowell
-# meta_rsqa_cmax[!CASRN %in% lc50$cas & 
-#                  !(Pesticide_use_group == "H" & Parent_Degradate == "Degradate"), ]
+# PPDB and EPA Registration documents 
+# meta_rsqa_cmax[!CASRN %in% lc50$cas &
+#   !(Pesticide_use_group == "H" & Parent_Degradate == "Degradate"), ]
 # ecotox_missing <- meta_rsqa_cmax[!CASRN %in% lc50$cas,]
-# saveRDS(ecotox_missing, file.path(data_cache, "ecotox_missing.rds"))
+# saveRDS(ecotox_missing, file.path(path_cache, "ecotox_missing.rds"))
 
 # Query PPDB ----
 # According to the PPDB: 
@@ -138,30 +199,27 @@ ppdb_queried[meta_rsqa_cmax, `:=`(Parent_Degradate = i.Parent_Degradate,
                                Pesticide_use_group = i.Pesticide_use_group), 
              on = c(cas = "CASRN")]
 ppdb_queried[, source := "PPDB"]
-# 103 substances covered, mostly Pesticides, 9 Degradates
-lc50 <- rbind(lc50, ppdb_queried[, .(pesticide, 
-                                     cas, 
-                                     taxon_most_sensitive,
-                                     conc_ug_l, 
-                                     Pesticide_use_group,
-                                     Parent_Degradate,
-                                     source)])
-# Hmisc::describe(lc50)
-# saveRDS(lc50, file.path(data_cache, "lc50.rds"))
+# 82 substances covered
+lc50 <- rbind(lc50, ppdb_queried[, .(
+  pesticide,
+  cas,
+  taxon_most_sensitive,
+  conc_ug_l,
+  Pesticide_use_group,
+  Parent_Degradate,
+  source
+)])
 
 # Remaining pesticides with no information ----
-# Focus on insecticides and fungicides because these are relevant 
-# for aquatic insects
-# Manually queried through 
+# Focus on insecticides and fungicides because these are relevant for aquatic insects
+# Manually queried: 
 # https://www.epa.gov/pesticide-science-and-assessing-pesticide-risks/aquatic-life-benchmarks-and-ecological-risk
-# meta_rsqa_cmax[!CASRN %in% lc50$cas &
+# new_missing <- meta_rsqa_cmax[!CASRN %in% lc50$cas &
 #                  !(Parent_Degradate ==  "Degradate" &
 #                      Pesticide_use_group == "H"), ] %>%
 #   fwrite(., file.path(path_repo, "ecotox_info_missing.csv"))
-# TODO: Search for I and F Degradates -> check Registration documents
 ecotox_info_missing <- fread(file.path(path_repo, "ecotox_info_missing.csv"))
 ecotox_info_missing[Availability_aq_life_bm == "Yes", source := "USEPA_Reg_doc"]
-#ecotox_info_missing[pesticide == "Fipronil amide", ]
 
 # Final list of ecotox test values for now
 lc50 <-
@@ -175,8 +233,8 @@ lc50 <-
     source
   )])
 
-# Assign ecotox information for fentin (triphenyl tin) from fentin hydorixde (only salt
-# of fentin registered for use in the US)
+# Assign ecotox information for fentin (triphenyl tin) 
+# from fentin hydorixde (only salt of fentin registered for use in the US)
 # Lowest value for Daphnia magna, 48h acute test
 lc50 <- rbind(
   lc50,
@@ -192,9 +250,6 @@ lc50 <- rbind(
 )
 # saveRDS(lc50, file.path(path_cache, "lc50.rds"))
 
-# Add infos for a few degradates from seven parent compounds that reach the maxTU
-# Information obtained from the scientific literature
-
 # Complete list of all pesticides + degradates detected
 meta_rsqa_cmax[lc50, `:=`(
   lc50_ug_l = i.conc_ug_l,
@@ -202,7 +257,8 @@ meta_rsqa_cmax[lc50, `:=`(
   ecotox_data_av = "Yes",
   source = i.source
 ),
-on = c(CASRN = "cas")]
+on = c("CASRN" = "cas")
+]
 meta_rsqa_cmax[is.na(ecotox_data_av), ecotox_data_av := "No"]
 setcolorder(meta_rsqa_cmax, c("CASRN", "Chemname"))
 
@@ -212,5 +268,18 @@ setcolorder(meta_rsqa_cmax, c("CASRN", "Chemname"))
 #     .(CASRN, Chemname, Parent_Degradate, Pesticide_use_group, lc50_ug_l)] %>% 
 #   fwrite(., file.path(path_repo, "compl_list_ecotox_info_missing.csv"))
 
-# Save for overview table
-saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))
+# Save for overview on lc50 values
+meta_rsqa_cmax[!is.na(lc50_ug_l), ] %>%
+  .[order(lc50_ug_l), .(
+    CASRN,
+    Chemname,
+    Parent_Degradate,
+    Pesticide_use_group,
+    lc50_ug_l = round(lc50_ug_l, digits = 4),
+    taxon_most_sensitive,
+    source
+  )] %>%
+  fwrite(., file.path(path_out, "pesticides_lc50.csv"))
+
+# Save for further use in R
+# saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))

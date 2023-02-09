@@ -331,7 +331,7 @@ perform_xgboost <- function(x,
     # Minimum loss reduction required to make a
     # further partition on a leaf node.
     # The larger, the more conservative the algorithm will be
-    lambda = to_tune(p_dbl(lower = 0, upper = 10)),
+    # lambda = to_tune(p_dbl(lower = 0, upper = 10)),
     # shrinks features without removing them, L2 regularization
     booster = "gbtree",
     eta = to_tune(p_dbl(lower = 0.001, upper = 1)),

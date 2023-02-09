@@ -13,8 +13,9 @@ library(purrr)
 library(zeallot)
 library(purrr)
 
-# Retrieval of taxonomic information
+# Retrieval of taxonomic information and habitat information
 library(taxize)
+library(worms)
 
 # Retrieval of ecotoxicological test  information
 library(standartox)

@@ -12,10 +12,22 @@
 # Data preprocessing ----
 
 ## CWM, CWS & TU data ----
+
+# Community weighted and community sum traits
 data_cwm <- readRDS(file.path(path_cache, "data_cwm.rds"))
 data_cws <- readRDS(file.path(path_cache, "data_cws.rds"))
+
+# Toxicitiy
 max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
 setnames(max_tu, "TSITE_NO_WQ", "site")
+
+# Few sites have two IDs (for eco and wq) 
+# because chemical and eco information were taken from slightly
+# different positions (mainly because of accessability issues)
+# eco site T03611200, corresponding wq site: T03611100
+# eco site T12073525, corresponding wq site: T12073425 
+data_cwm$Midwest[STAID == "T03611200", STAID := "T03611100"]
+data_cwm$PN[site == "T12073525", site := "T12073425"]
 
 # Combine max tu and cwm for each region
 # make an exception for Midwest (merge via STAID)
@@ -28,14 +40,12 @@ data_cws <- lapply(data_cws, function(x) {
   x[max_tu, max_log_tu := i.max_log_tu, on = on]
 })
 
-# There are sites that don't have chemical data
+# Few sites that don't have chemical data
 # lapply(data_cwm, function(y)
 #   y[is.na(max_log_tu), ])
-# Few sites from Midwest:
+# Midwest:
 # unique(data_cwm$Midwest[is.na(max_log_tu), STAID])
-# T03611200, T03318800, T393247089260701
-# and PN: T12073525
-# unique(data_cwm$PN[is.na(max_log_tu), site])
+# T03318800, T393247089260701
 
 # Note to Ian that there were some duplicate STAID (but different sites)
 # for Midwest and that for three sites max_log_tu could not be matched
@@ -80,13 +90,12 @@ c(trait_groups, trait_groups_rel) %<-% trait_groups_comb[c(
 
 ## Train/validation/test split approach ----
 # TODO: Check why importance values are not returned!
-summary_funs <- list(
-  "min" = min,
-  "max" = max,
-  "mean" = mean,
-  "median" = median
-)
-
+# summary_funs <- list(
+#   "min" = min,
+#   "max" = max,
+#   "mean" = mean,
+#   "median" = median
+# )
 
 ## CWM ----
 trait_names <- unique(data_cwm$California$trait)
@@ -162,6 +171,59 @@ xgboost_perform <- lapply(xgboost_perform, function(x) as.data.table(x, keep.row
   dcast(., ... ~ rn, value.var = "value")
 setnames(xgboost_perform, "variable", "region")
 saveRDS(xgboost_perform, file.path(path_cache, "xgboost_perform.rds"))
+
+xgboost_perform <- readRDS(file.path(path_cache, "xgboost_perform.rds"))
+xgboost_perform %>%
+  melt(.,
+    id.vars = c("region", "method"),
+    value.name = "rmse"
+  ) %>%
+  ggplot(., aes(x = method, y = rmse)) +
+  geom_col(aes(fill = as.factor(variable)),
+    position = "dodge",
+    width = 0.6
+  ) +
+  scale_fill_d3(labels = c("Test", "Train")) +
+  coord_flip() +
+  labs(
+    x = "",
+    y = "RMSE",
+    fill = ""
+  ) +
+  facet_wrap(. ~ region) +
+  theme_bw() +
+  theme(
+    axis.title = element_text(size = 16),
+    axis.text.x = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ),
+    axis.text.y = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ),
+    strip.text = element_text(
+      family = "Roboto Mono",
+      size = 14
+    ),
+    legend.text = element_text(
+      family = "Roboto Mono",
+      size = 14
+    )
+  )
+ggsave(
+  filename = file.path(
+    path_out,
+    "Graphs",
+    "perform_xgboost.png"
+  ),
+  width = 35,
+  height = 20,
+  units = "cm"
+)
+
+
+
 
 ## Nested resampling ----
 # perfor_ls$California$perform_full_archive[, lapply(summary_funs, function(f)

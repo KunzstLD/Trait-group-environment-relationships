@@ -41,7 +41,7 @@ abund <- readRDS(file.path(path_cache, "total_abund_CEOPT.rds"))
 
 # Some STAID of Midwest are duplicates, though the sites are different
 # Taken care of in merge with ecotox data 
-# abund[!is.na(STAID), .(.N, site), by = "STAID"] %>% 
+# abund[!is.na(STAID), .(.N, site, Region), by = "STAID"] %>% 
 #    .[N > 222, ] %>% 
 #    unique(.)
 abund_ls <- split(abund, f = abund$Region)
