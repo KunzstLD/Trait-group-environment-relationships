@@ -12,7 +12,7 @@ fc_traits <-
        value = TRUE)
 q_traits <- "sensitivity_organic"
 
-# Cluster analysis ----
+# Hierarchical cluster analysis ----
 results_genera_cl <- clustering_traits(
   x = trait_genera[, .SD, .SDcols = c(fc_traits, q_traits)],
   fc_traits = fc_traits,
@@ -37,6 +37,40 @@ cor(results_genera_cl$distance_matrix,
     cophenetic(results_genera_cl$hc_wardD2))
 cor(results_family_cl$distance_matrix,
     cophenetic(results_family_cl$hc_wardD2))
+
+# Model-based clustering ----
+# Gives 10 groups, but
+# does not lead to better predictions
+# clustering_mc <- function(x, taxa, k_max) {
+#   setDF(x)
+#   row.names(x) <- taxa
+
+#   mc_output <- Mclust(x, 1:k_max)
+#   mc_output
+# }
+
+# trait_family_mc <- clustering_mc(
+#   x = trait_family[, .SD, .SDcols = c(fc_traits, q_traits)],
+#   taxa = trait_family$family,
+#   k_max = 20
+# )
+# summary(trait_family_mc)
+
+# # Model selection for volume, shape, and orientation
+# plot(trait_family_mc, what = 'BIC')
+# # plot(trait_family_mc, what = 'classification')
+# # plot(trait_family_mc, what = 'uncertainty')
+
+# # Uncertainty for group assignment
+# # relatively low, looks good!
+# sort(trait_family_mc$uncertainty, decreasing = TRUE)
+
+# # Group assignment
+# tpgs_mc <- data.table(
+#   group = trait_family_mc$classification,
+#   family = names(trait_family_mc$classification)
+# )
+# saveRDS(tpgs_mc, file.path(path_cache, "tpgs_mc.rds"))
 
 # Dendrograms ----
 # Genera-lvl: 

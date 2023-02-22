@@ -2,37 +2,39 @@
 # Mean trait profiles
 # ____________________________________________
 
-# Load tpgs & full trait data
+# Load tpgs
 tpgs <- readRDS(file.path(path_cache, "tpgs_family_genus.rds"))
+
+# Load trait data
 trait_genera <- readRDS(file.path(path_cache, "trait_genera.rds"))
 trait_family <- readRDS(file.path(path_cache, "trait_family.rds"))
-
 trait_names <-
   grep("feed.*|resp.*|locom.*|size.*|volt.*|sensitivity.*",
        names(trait_genera),
        value = TRUE)
 
 # Calculation mean trait profiles ----
+# Genus level
 trait_genera[tpgs, group := i.group,
              on = c("genus" = "taxon")]
 trait_genera[, n_taxa_group := .N, by = "group"]
-saveRDS(trait_genera, file.path(path_cache, "trait_genera_tpg.rds"))
-
+# saveRDS(trait_genera, file.path(path_cache, "trait_genera_tpg.rds"))
 mtps_genera <- calc_mean_tps(
   x = trait_genera[, .SD, .SDcols = !c("family", "order")],
   taxa_id = "genus"
 )
 
+# Family level
 trait_family[tpgs, group := i.group,
              on = c("family" = "taxon")]
 trait_family[, n_taxa_group := .N, by = "group"]
-saveRDS(trait_family, file.path(path_cache, "trait_family_tpg.rds"))
-
+# saveRDS(trait_family, file.path(path_cache, "trait_family_tpg.rds"))
 mtps_family <- calc_mean_tps(
   x = trait_family[, .SD, .SDcols = !c("order")],
   taxa_id = "family"
 )
 
+# Normalisation 
 # Most mean trait profiles are normalised
 # Still, for some there seems to be problems.
 # Hence, normalisation is done again

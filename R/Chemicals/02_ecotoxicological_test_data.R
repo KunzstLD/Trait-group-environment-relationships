@@ -248,6 +248,45 @@ lc50 <- rbind(
     source = "PPDB"
   )
 )
+
+# Add data from literature search (probably won't play a role) for important pc
+ecotox_important_pc <- fread(file.path(path_repo, "pot_important_degradates_ecotox_info_missing.csv"))
+ecotox_important_pc <- ecotox_important_pc[!is.na(LC50_ug_l), ]
+ecotox_important_pc[Degradate == "Chlorpyrifos oxon", LC50_ug_l := gmean(LC50_ug_l)]
+ecotox_important_pc <- ecotox_important_pc[!duplicated(Degradate), ]
+setnames(
+  ecotox_important_pc,
+  c(
+    "LC50_ug_l",
+    "most_sensitive_taxon",
+    "Source",
+    "Notes",
+    "Cas_degradates",
+    "Degradate"
+  ),
+  c(
+    "lc50_ug_l",
+    "taxon_most_sensitive",
+    "source",
+    "notes",
+    "cas",
+    "pesticide"
+  )
+)
+
+# Add lc50 data obtained from literature
+lc50 <- rbind(lc50, ecotox_important_pc[, .(
+  cas,
+  lc50_ug_l,
+  taxon_most_sensitive,
+  source,
+  notes,
+  cas,
+  pesticide
+)],
+fill = TRUE
+)
+lc50[is.na(Parent_Degradate), Parent_Degradate := "Degradate"]
 # saveRDS(lc50, file.path(path_cache, "lc50.rds"))
 
 # Complete list of all pesticides + degradates detected
@@ -269,17 +308,17 @@ setcolorder(meta_rsqa_cmax, c("CASRN", "Chemname"))
 #   fwrite(., file.path(path_repo, "compl_list_ecotox_info_missing.csv"))
 
 # Save for overview on lc50 values
-meta_rsqa_cmax[!is.na(lc50_ug_l), ] %>%
-  .[order(lc50_ug_l), .(
-    CASRN,
-    Chemname,
-    Parent_Degradate,
-    Pesticide_use_group,
-    lc50_ug_l = round(lc50_ug_l, digits = 4),
-    taxon_most_sensitive,
-    source
-  )] %>%
-  fwrite(., file.path(path_out, "pesticides_lc50.csv"))
+# meta_rsqa_cmax[!is.na(lc50_ug_l), ] %>%
+#   .[order(lc50_ug_l), .(
+#     CASRN,
+#     Chemname,
+#     Parent_Degradate,
+#     Pesticide_use_group,
+#     lc50_ug_l = round(lc50_ug_l, digits = 4),
+#     taxon_most_sensitive,
+#     source
+#   )] %>%
+#   fwrite(., file.path(path_out, "pesticides_lc50.csv"))
 
 # Save for further use in R
 # saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))

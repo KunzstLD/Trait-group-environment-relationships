@@ -21,11 +21,11 @@ data_cws <- readRDS(file.path(path_cache, "data_cws.rds"))
 max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
 setnames(max_tu, "TSITE_NO_WQ", "site")
 
-# Few sites have two IDs (for eco and wq) 
+# Few sites have two IDs (for eco and wq)
 # because chemical and eco information were taken from slightly
 # different positions (mainly because of accessability issues)
 # eco site T03611200, corresponding wq site: T03611100
-# eco site T12073525, corresponding wq site: T12073425 
+# eco site T12073525, corresponding wq site: T12073425
 data_cwm$Midwest[STAID == "T03611200", STAID := "T03611100"]
 data_cwm$PN[site == "T12073525", site := "T12073425"]
 
@@ -60,20 +60,24 @@ data_cws$PN <- data_cws$PN[!is.na(max_log_tu),]
 trait_groups <- readRDS(file.path(path_cache, "trait_groups.rds")) 
 trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel.rds"))
 
-# TODO: test that code!
+trait_groups <- readRDS(file.path(path_cache, "trait_groups_mc.rds")) 
+trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel_mc.rds"))
+
 trait_groups_comb  <- list(
   "trait_groups" = trait_groups,
   "trait_groups_rel" = trait_groups_rel
 )
-
 trait_groups_comb <- lapply(trait_groups_comb, function(x) {
+
   # RM sites with no chemical information
   x$Midwest <- x$Midwest[!STAID %in% c(
-    "T03611200",
     "T03318800",
     "T393247089260701"
   ), ]
-  x$PN <- x$PN[site != "T12073525", ]
+
+  # Change the two site ids to match the chemical information
+  x$Midwest[STAID == "T03611200", STAID := "T03611100"]
+  x$PN[site == "T12073525", site := "T12073425"]
 
   # Add max TU
   x <- lapply(x, function(y) {
@@ -89,7 +93,6 @@ c(trait_groups, trait_groups_rel) %<-% trait_groups_comb[c(
 # Boosting ----
 
 ## Train/validation/test split approach ----
-# TODO: Check why importance values are not returned!
 # summary_funs <- list(
 #   "min" = min,
 #   "max" = max,
@@ -138,7 +141,6 @@ for (region in names(trait_groups)) {
 }
 saveRDS(res_xgboost_tpgs, file.path(path_cache, "res_xgboost_tpgs.rds"))
 
-
 ## TPGs relative fraction ----
 res_xgboost_tpgs_rel <- list()
 for (region in names(trait_groups_rel)) {
@@ -150,80 +152,6 @@ for (region in names(trait_groups_rel)) {
   )
 }
 saveRDS(res_xgboost_tpgs_rel, file.path(path_cache, "res_xgboost_tpgs_rel.rds"))
-  
-## Performance results  ----
-# Train/val/test split approach with regularization
-res_xgboost_comb <- list(
-  "cwm" = res_xgboost_cwm,
-  "cws" = res_xgboost_cws,
-  "tpgs" = res_xgboost_tpgs,
-  "tpgs_rel" = res_xgboost_tpgs_rel
-)
-xgboost_perform <- purrr::map(res_xgboost_comb, ~ sapply(.x, function(x) {
-  c(
-    "train" = x$pred_train,
-    "test" = x$pred_test
-  )
-}))
-xgboost_perform <- lapply(xgboost_perform, function(x) as.data.table(x, keep.rownames = TRUE)) %>%
-  rbindlist(., id = "method") %>%
-  melt(., id.vars = c("rn", "method")) %>%
-  dcast(., ... ~ rn, value.var = "value")
-setnames(xgboost_perform, "variable", "region")
-saveRDS(xgboost_perform, file.path(path_cache, "xgboost_perform.rds"))
-
-xgboost_perform <- readRDS(file.path(path_cache, "xgboost_perform.rds"))
-xgboost_perform %>%
-  melt(.,
-    id.vars = c("region", "method"),
-    value.name = "rmse"
-  ) %>%
-  ggplot(., aes(x = method, y = rmse)) +
-  geom_col(aes(fill = as.factor(variable)),
-    position = "dodge",
-    width = 0.6
-  ) +
-  scale_fill_d3(labels = c("Test", "Train")) +
-  coord_flip() +
-  labs(
-    x = "",
-    y = "RMSE",
-    fill = ""
-  ) +
-  facet_wrap(. ~ region) +
-  theme_bw() +
-  theme(
-    axis.title = element_text(size = 16),
-    axis.text.x = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    axis.text.y = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    strip.text = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    legend.text = element_text(
-      family = "Roboto Mono",
-      size = 14
-    )
-  )
-ggsave(
-  filename = file.path(
-    path_out,
-    "Graphs",
-    "perform_xgboost.png"
-  ),
-  width = 35,
-  height = 20,
-  units = "cm"
-)
-
-
-
 
 ## Nested resampling ----
 # perfor_ls$California$perform_full_archive[, lapply(summary_funs, function(f)

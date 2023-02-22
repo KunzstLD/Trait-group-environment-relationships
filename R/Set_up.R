@@ -33,6 +33,7 @@ library(ade4)
 library(cluster)
 library(NbClust)
 library(dendextend)
+library(mclust)
 
 # Boosted regression trees
 library(mlr3)
