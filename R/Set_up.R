@@ -27,6 +27,7 @@ library(reactable)
 library(htmltools)
 library(patchwork)
 library(ggsci)
+library(GGally)
 
 # Distance matrices and clustering
 library(ade4)

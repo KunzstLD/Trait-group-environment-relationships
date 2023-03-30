@@ -129,6 +129,14 @@ direct_agg <- function(trait_data,
 
 # Statistical (helper) functions ----
 
+# List of stat. summary functions 
+summary_funs <- list(
+  "min" = min,
+  "max" = max,
+  "mean" = mean,
+  "median" = median
+)
+
 # test <- rnorm(n = 10000, mean = 2, sd = 0.1)
 # Problem of overflow, will result in Inf for large lists
 # gmean <- function(x){
@@ -335,9 +343,8 @@ perform_xgboost <- function(x,
     # shrinks features without removing them, L2 regularization
     booster = "gbtree",
     eta = to_tune(p_dbl(lower = 0.001, upper = 1)),
-    # controlling the learning rate
+    # controlling the learning rate to prevent overfitting
     # (scaling of the contrib. of each tree by a factor 0-1 when added)
-    # to prevent overfitting,
     # low values means more nrounds
     # (robust to overfitting but also slower to compute)
     max_depth = to_tune(p_int(lower = 2L, upper = 15L)),
@@ -551,7 +558,7 @@ fun_dendrog_pl <- function(hc,
     as.dendrogram() %>%
     color_branches(k = optimal_nog) %>%
     hang.dendrogram(hang_height = hang_height) %>%
-    set("labels_cex", 0.55) %>%
+    set("labels_cex", 0.8) %>%
     dendextend::ladderize() %>%
     set("labels", labels)
 }
