@@ -147,6 +147,27 @@ gmean <- function(x) {
   exp(mean(log(x)))
 }
 
+## Interactions ----
+fun_interactions <- function(x,
+                             formulas,
+                             titles,
+                             naming_category) {
+    regr_interactions <- lapply(
+        formulas,
+        function(form) {
+            summary(lm(form, data = x)) %>%
+                coef(.) %>%
+                as.data.table(., keep.rownames = "id")
+        }
+    )
+    names(regr_interactions) <- titles
+    regr_interactions <- rbindlist(
+        regr_interactions,
+        idcol = naming_category
+    )
+    regr_interactions
+}
+
 ## Cluster analysis ----
 mycluster_hc <- function(x, k) {
   list(cluster = cutree(hclust(as.dist(x),
