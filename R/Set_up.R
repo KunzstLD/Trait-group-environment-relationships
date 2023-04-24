@@ -9,12 +9,11 @@
 library(data.table)
 library(dplyr)
 library(readxl)
-library(purrr)
 library(zeallot)
 library(purrr)
 
 # Retrieval of taxonomic information and habitat information
-library(taxize)
+# library(taxize)
 library(worms)
 
 # Retrieval of ecotoxicological test  information

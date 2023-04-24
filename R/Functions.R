@@ -137,6 +137,7 @@ summary_funs <- list(
   "median" = median
 )
 
+## Geometric mean ---- 
 # test <- rnorm(n = 10000, mean = 2, sd = 0.1)
 # Problem of overflow, will result in Inf for large lists
 # gmean <- function(x){
@@ -147,10 +148,34 @@ gmean <- function(x) {
   exp(mean(log(x)))
 }
 
+## Simple regression ----
+# For inside use in data.tables
+# Old version: 
+# summary(lm(form, data = x)) %>%
+  #     coef(.) %>%
+  #     as.data.table(., keep.rownames = "id")
+sregr_dt <- function(x, form) {
+  lm_summary <- summary(lm(form, data = x))
+  cbind(
+    coef(lm_summary),
+    "adj_r_squared" = lm_summary["adj.r.squared"]
+  ) %>%
+    as.data.table(., keep.rownames = "id")  
+}
+
+# Create a data.table out of an lm summary 
+lm_summary_to_dt  <- function(lm_obj) {
+    lm_summary <- summary(lm_obj)
+    cbind(
+        coef(lm_summary),
+        "adj_r_squared" = lm_summary["adj.r.squared"]
+    ) %>%
+        as.data.table(., keep.rownames = "id")
+}
+  
 ## Interactions ----
 fun_interactions <- function(x,
                              formulas,
-                             titles,
                              naming_category) {
     regr_interactions <- lapply(
         formulas,
@@ -160,7 +185,7 @@ fun_interactions <- function(x,
                 as.data.table(., keep.rownames = "id")
         }
     )
-    names(regr_interactions) <- titles
+    names(regr_interactions) <- formulas
     regr_interactions <- rbindlist(
         regr_interactions,
         idcol = naming_category
@@ -325,6 +350,7 @@ cws <- function(abund,
 # features are the variables used
 # threads is the number of CPUs used for parallelization
 # id for naming each task
+# ?xgboost()
 perform_xgboost <- function(x,
                             split_ratio = 0.8,
                             features,
@@ -552,10 +578,22 @@ query_google <- function(x) {
 
 ## Load batches of similarly named datasets ----
 # So far, only RDS files
-load_data <- function(path, pattern, name_rm_pattern = NULL) {
+load_data <- function(path,
+                      pattern,
+                      format = "rds",
+                      name_rm_pattern = NULL) {
   files <- list.files(path = path, pattern = pattern)
-  data <- lapply(files, function(y) readRDS(file = file.path(path, y)))
-  name <- sub("\\.rds", "", files)
+
+  if (format == "rds") {
+    data <- lapply(files, function(y) readRDS(file = file.path(path, y)))
+    name <- sub("\\.rds", "", files)
+  }
+
+  if (format == "csv") {
+    data <- lapply(files, function(y) fread(file = file.path(path, y)))
+    name <- sub("\\.csv", "", files)
+  }
+
   if (!is.null(name_rm_pattern)) {
     name <- sub(name_rm_pattern, "", name)
   }
