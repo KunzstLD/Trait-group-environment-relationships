@@ -28,6 +28,8 @@ setnames(max_tu, "TSITE_NO_WQ", "site")
 # eco site T12073525, corresponding wq site: T12073425
 data_cwm$Midwest[STAID == "T03611200", STAID := "T03611100"]
 data_cwm$PN[site == "T12073525", site := "T12073425"]
+data_cws$Midwest[STAID == "T03611200", STAID := "T03611100"]
+data_cws$PN[site == "T12073525", site := "T12073425"]
 
 # Combine max tu and cwm for each region
 # make an exception for Midwest (merge via STAID)
@@ -46,28 +48,23 @@ data_cws <- lapply(data_cws, function(x) {
 # Midwest:
 # unique(data_cwm$Midwest[is.na(max_log_tu), STAID])
 # T03318800, T393247089260701
-
-# Note to Ian that there were some duplicate STAID (but different sites)
-# for Midwest and that for three sites max_log_tu could not be matched
-# max_tu[site %like% "T12073525", ]
-# data_cwm$PN[site == "T12073525",]
 data_cwm$Midwest <- data_cwm$Midwest[!is.na(max_log_tu), ]
-data_cwm$PN <- data_cwm$PN[!is.na(max_log_tu),]
 data_cws$Midwest <- data_cws$Midwest[!is.na(max_log_tu), ]
-data_cws$PN <- data_cws$PN[!is.na(max_log_tu),]
+# saveRDS(data_cwm, file.path(path_cache, "data_cwm_final.rds"))
+
+# 432 sites are used in the end (chemical information)
+# Stream insect abundance data for 435 sites, 
+# but three from Midwest have the same chemical information 
+# lapply(data_cwm, function(x) {
+#   if ("STAID" %in% names(x)) x[, uniqueN(STAID)] else x[, uniqueN(site)]
+# }) %>% unlist %>% sum
 
 ## TPG data & TU data ----
-trait_groups <- readRDS(file.path(path_cache, "trait_groups.rds")) 
 trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel.rds"))
+# trait_groups <- readRDS(file.path(path_cache, "trait_groups.rds")) 
 
-trait_groups <- readRDS(file.path(path_cache, "trait_groups_mc.rds")) 
-trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel_mc.rds"))
-
-trait_groups_comb  <- list(
-  "trait_groups" = trait_groups,
-  "trait_groups_rel" = trait_groups_rel
-)
-trait_groups_comb <- lapply(trait_groups_comb, function(x) {
+# Final preprocessing and add max logTU
+trait_groups_rel <- lapply(trait_groups_rel, function(x) {
 
   # RM sites with no chemical information
   x$Midwest <- x$Midwest[!STAID %in% c(
@@ -85,20 +82,15 @@ trait_groups_comb <- lapply(trait_groups_comb, function(x) {
     y[max_tu, max_log_tu := i.max_log_tu, on = on]
   })
 })
-c(trait_groups, trait_groups_rel) %<-% trait_groups_comb[c(
-  "trait_groups",
-  "trait_groups_rel"
+c(trait_groups_rel_family, trait_groups_rel_genus) %<-% trait_groups_rel[c(
+  "family_lvl",
+  "genus_lvl"
 )]
+# saveRDS(trait_groups_rel, file.path(path_cache, "trait_groups_rel_final.rds"))
 
 # Boosting ----
 
 ## Train/validation/test split approach ----
-# summary_funs <- list(
-#   "min" = min,
-#   "max" = max,
-#   "mean" = mean,
-#   "median" = median
-# )
 
 ## CWM ----
 trait_names <- unique(data_cwm$California$trait)
@@ -113,7 +105,10 @@ for (region in names(data_cwm)) {
     id = region
   )
 }
-saveRDS(res_xgboost_cwm, file.path(path_cache, "res_xgboost_cwm.rds"))
+# saveRDS(res_xgboost_cwm, file.path(path_cache, "res_xgboost_cwm.rds"))
+res_xgboost_cwm$Midwest$importance
+res_xgboost_cwm$Midwest$pred_test^2
+
 
 ## CWS ----
 res_xgboost_cws <- list()
@@ -127,31 +122,44 @@ for (region in names(data_cws)) {
     id = region
   )
 }
-saveRDS(res_xgboost_cws, file.path(path_cache, "res_xgboost_cws.rds"))
-
-## TPGs absolute fraction ----
-res_xgboost_tpgs <- list()
-for (region in names(trait_groups)) {
-  var_names <- names(trait_groups[[region]])[names(trait_groups[[region]]) %like% "^T[0-9]"]
-  res_xgboost_tpgs[[region]] <- perform_xgboost(
-    x = trait_groups[[region]],
-    features = var_names,
-    id = region
-  )
-}
-saveRDS(res_xgboost_tpgs, file.path(path_cache, "res_xgboost_tpgs.rds"))
+# saveRDS(res_xgboost_cws, file.path(path_cache, "res_xgboost_cws.rds"))
 
 ## TPGs relative fraction ----
-res_xgboost_tpgs_rel <- list()
-for (region in names(trait_groups_rel)) {
-  var_names <- names(trait_groups_rel[[region]])[names(trait_groups_rel[[region]]) %like% "^T[0-9]"]
-  res_xgboost_tpgs_rel[[region]] <- perform_xgboost(
-    x = trait_groups_rel[[region]],
+res_xgboost_tpgs_rel_family <- list()
+for (region in names(trait_groups_rel_family)) {
+  var_names <- names(trait_groups_rel_family[[region]])[names(trait_groups_rel_family[[region]]) %like% "^T[0-9]"]
+  res_xgboost_tpgs_rel_family[[region]] <- perform_xgboost(
+    x = trait_groups_rel_family[[region]],
     features = var_names,
     id = region
   )
 }
-saveRDS(res_xgboost_tpgs_rel, file.path(path_cache, "res_xgboost_tpgs_rel.rds"))
+# saveRDS(res_xgboost_tpgs_rel_family, file.path(path_cache, "res_xgboost_tpgs_rel_family.rds"))
+
+res_xgboost_tpgs_rel_genus <- list()
+for (region in names(trait_groups_rel_genus)) {
+  var_names <- names(trait_groups_rel_genus[[region]])[names(trait_groups_rel_genus[[region]]) %like% "^T[0-9]"]
+  res_xgboost_tpgs_rel_genus[[region]] <- perform_xgboost(
+    x = trait_groups_rel_genus[[region]],
+    features = var_names,
+    id = region
+  )
+}
+saveRDS(res_xgboost_tpgs_rel_genus, file.path(path_cache, "res_xgboost_tpgs_rel_genus.rds"))
+# lapply(res_xgboost_tpgs_rel_genus, function(x) c(x$pred_test^2, x$pred_train^2))
+
+# ## TPGs absolute fraction ----
+# res_xgboost_tpgs <- list()
+# for (region in names(trait_groups)) {
+#   var_names <- names(trait_groups[[region]])[names(trait_groups[[region]]) %like% "^T[0-9]"]
+#   res_xgboost_tpgs[[region]] <- perform_xgboost(
+#     x = trait_groups[[region]],
+#     features = var_names,
+#     id = region
+#   )
+# }
+# saveRDS(res_xgboost_tpgs, file.path(path_cache, "res_xgboost_tpgs.rds"))
+
 
 ## Nested resampling ----
 # perfor_ls$California$perform_full_archive[, lapply(summary_funs, function(f)
