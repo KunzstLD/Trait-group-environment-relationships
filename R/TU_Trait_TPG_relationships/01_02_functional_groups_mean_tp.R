@@ -24,6 +24,11 @@ mtps_genera <- calc_mean_tps(
   taxa_id = "genus"
 )
 
+# Overview on orders 
+# trait_genera[, .N, by = "order"] %>% 
+# .[order(-N), ] %>% 
+# fwrite(., file.path(path_out, "overview_order_tpg_genus.csv"))
+
 # Family level
 trait_family[tpgs, group := i.group,
              on = c("family" = "taxon")]
@@ -33,6 +38,10 @@ mtps_family <- calc_mean_tps(
   x = trait_family[, .SD, .SDcols = !c("order")],
   taxa_id = "family"
 )
+
+trait_family[, .N, by = "order"] %>% 
+.[order(-N), ] %>% 
+fwrite(., file.path(path_out, "overview_order_tpg_family.csv"))
 
 # Normalisation 
 # Most mean trait profiles are normalised

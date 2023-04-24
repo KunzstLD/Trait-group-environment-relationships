@@ -13,17 +13,21 @@ fc_traits <-
 q_traits <- "sensitivity_organic"
 
 # Hierarchical cluster analysis ----
-results_genera_cl <- clustering_traits(
-  x = trait_genera[, .SD, .SDcols = c(fc_traits, q_traits)],
-  fc_traits = fc_traits,
-  q_traits = q_traits,
-  taxa = trait_genera$genus
-)
 results_family_cl <- clustering_traits(
   x = trait_family[, .SD, .SDcols = c(fc_traits, q_traits)],
   fc_traits = fc_traits,
   q_traits = q_traits,
   taxa = trait_family$family
+)
+
+# Use k_max 15, the number that has been found with 
+# traits on family level
+results_genera_cl <- clustering_traits(
+  x = trait_genera[, .SD, .SDcols = c(fc_traits, q_traits)],
+  fc_traits = fc_traits,
+  q_traits = q_traits,
+  taxa = trait_genera$genus,
+  k_max = 15
 )
 results_cl <- list(
   "family" = results_family_cl,
@@ -80,7 +84,7 @@ cor(results_family_cl$distance_matrix,
 #  - Could try different numbers: 10, 12, ...?
 # Family-lvl:
 #  - Gap statistic: 15, silhouette: 20
-#  - TODO Check trait profiles
+results_cl <- readRDS(file.path(path_cache, "results_cl"))
 dendrograms <- list()
 for (i in names(results_cl)) {
   plot <- fun_dendrog_pl(
@@ -90,7 +94,7 @@ for (i in names(results_cl)) {
   )
   dendrograms[[i]] <- plot
   png(
-    file = file.path(path_out,
+    file = file.path(path_paper,
                      "Graphs",
                      paste0(
                        "Dendrogram_", i, ".png"
