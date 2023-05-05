@@ -6,6 +6,7 @@
 ## Add ecotox info ----
 # Final list of ecotox_test data  
 meta_rsqa_cmax <- readRDS(file.path(path_cache, "meta_rsqa_cmax.rds"))
+# meta_rsqa_cmax[ecotox_data_av == "Yes", ]
 
 # Cmax data preprocessed
 # Add lc50 of most sensitive organism
@@ -60,40 +61,158 @@ max_tu <- rbind(max_tu,
 )
 max_tu[is.infinite(max_log_tu), max_log_tu := -5]
 max_tu[max_log_tu < -5, max_log_tu := -5]
+
+# Rename regions
+max_tu[, Region := fcase(
+  Region == "CSQA", "California",
+  Region == "MSQA", "Midwest",
+  Region == "NESQA", "Northeast",
+  Region == "PNSQA", "PN",
+  Region == "SESQA", "Southeast"
+)]
 # saveRDS(max_tu, file.path(path_cache, "max_tu.rds"))
 
-# Table for Co-Authors ecotox data
-# meta_rsqa_cmax[rsqa_cmax[!is.na(n_occr_pesticide), ], 
-#                n_occr_pesticide := i.n_occr_pesticide, 
-#                on = c(CASRN = "cas")]
-# meta_rsqa_cmax[source == "PPDB", source := "ppdb"]
-# meta_rsqa_cmax[max_tu, n_max_tu := i.n_max_tu, on = c(CASRN = "cas")]
-# meta_rsqa_cmax[, .(
-#   CASRN,
-#   Chemname,
-#   Parent_Degradate,
-#   Pesticide_use_group,
-#   occr_pesticides = round(n_occr_pesticide * 100, digits = 2),
-#   lc50_ug_l = round(lc50_ug_l, digits = 2),
-#   max_tu_at_sites = round(n_max_tu * 100, digits = 2),
-#   taxon_most_sensitive,
-#   ecotox_data_av,
-#   source,
-#   notes
-# )] %>% 
-#   .[order(-ecotox_data_av, -source), ] %>% 
-#   fwrite(., file.path(path_repo, "overview_pesticides_ecotox_data.csv"))
+# SI Table ecotox data
+meta_rsqa_cmax[rsqa_cmax[!is.na(n_occr_pesticide), ], 
+               n_occr_pesticide := i.n_occr_pesticide, 
+               on = c(CASRN = "cas")]
+meta_rsqa_cmax[source == "PPDB", source := "ppdb"]
+meta_rsqa_cmax[max_tu, n_max_tu := i.n_max_tu, on = c(CASRN = "cas")]
+meta_rsqa_cmax[, Pesticide_use_group := fcase(
+  Pesticide_use_group == "H", "Herbicide",
+  Pesticide_use_group == "I", "Insecticide",
+  Pesticide_use_group == "F", "Fungicide"
+)] %>%
+  .[, Pesticide_use_group := factor(Pesticide_use_group,
+    levels = c("Insecticide", "Fungicide", "Herbicide")
+  )] %>%
+  .[source %in% c("Literature", "Syngenta/ECHA"), source := "Scientific literature"] %>%
+  .[
+    order(-ecotox_data_av, -source, Pesticide_use_group),
+    .(
+      CASRN,
+      Chemname,
+      Parent_Degradate,
+      Pesticide_use_group,
+      lc50_ug_l = round(lc50_ug_l, digits = 2),
+      taxon_most_sensitive,
+      source
+    )
+  ] %>%
+  setnames(
+    .,
+    c(
+      "Chemname",
+      "Parent_Degradate",
+      "Pesticide_use_group",
+      "lc50_ug_l",
+      "taxon_most_sensitive",
+      "source"
+    ),
+    c(
+      "Pesticide name",
+      "Parent or Degradate",
+      "Pesticide use group",
+      "LC50 [µg/L]",
+      "Most sensitive taxon",
+      "Source"
+    )
+  ) %>%
+  fwrite(., file.path(path_paper, "Tables", "overview_pesticides_ecotox_data.csv"), sep = ";")
 
-# Plot
+# Dominating pesticides
+max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
+
 # Overview over log max TU
+summary_max_tu <- max_tu[, lapply(summary_funs, function(f) f(max_log_tu)),
+  by = "Region"
+]
+
+# Pesticides that contributed most often to maxTU 
+# SI Table
+max_tu[, .(cas, .N), by = c("pesticide", "Region")] %>%
+  unique() %>%
+  .[!is.na(pesticide), ] %>%
+  dcast(., ... ~ Region, value.var = "N") %>%
+  .[, c("California", "Midwest", "Northeast", "PN", "Southeast") := lapply(.SD, function(x) fifelse(is.na(x), 0, x)),
+    .SDcols = c("California", "Midwest", "Northeast", "PN", "Southeast")
+  ] %>%
+  .[meta_rsqa_cmax, Pesticide_use_group := i.Pesticide_use_group,
+    on = c("cas" = "CASRN")
+  ] %>%
+  .[, Pesticide_use_group := factor(Pesticide_use_group, levels = c("I", "F", "H"))] %>%
+  .[, sum_occr := California + Midwest + Northeast + PN + Southeast] %>%
+  .[order(Pesticide_use_group, -sum_occr), ] %>%
+  .[, .(pesticide, Pesticide_use_group, California, Midwest, Northeast, PN, Southeast)] %>%
+  .[, Pesticide_use_group := fcase(
+    Pesticide_use_group == "I", "Insecticide",
+    Pesticide_use_group == "F", "Fungicide",
+    Pesticide_use_group == "H", "Herbicide"
+  ), ] %>%
+  setnames(
+    .,
+    c("pesticide", "Pesticide_use_group", "PN"),
+    c("Pesticide", "Pesticide use group", "Northwest")
+  ) %>%
+  fwrite(., file.path(path_paper, "Tables", "N_most_toxic_pesticides.csv"),
+    sep = ";"
+  )
+
+# Dominant pesticides: range of TU values
+# Imidaclopird
+max_tu[
+  pesticide %in% c(
+    "Imidacloprid",
+    "Fipronil",
+    "Fipronil sulfone",
+    "Chlorpyrifos"
+  ), range(max_log_tu),
+  by = "pesticide"
+]
+
+# Atrazine: Occurrences as most toxic pesticide
+max_tu[pesticide == "Atrazine", .N, by = "Region"]
+Hmisc::describe(max_tu[pesticide == "Atrazine", .(max_log_tu)])
+
+# Plotting
+summary_max_tu[, x_coord := c(1,2,3,4,5)]
 ggplot(max_tu, aes(x = Region, y = max_log_tu)) +
-  ggdist::stat_halfeye() +
+  ggdist::stat_halfeye(
+    adjust = .6,
+    width = .6,
+    .width = 0,
+    justification = -.3,
+    point_colour = NA
+  ) +
   geom_boxplot(
     width = .2,
     outlier.shape = NA
-  )+
+  ) +
+  geom_point(
+    size = 2,
+    alpha = .4,
+    position = position_jitter(
+      seed = 1, width = .05
+    )
+  ) +
+  geom_text(
+    data = summary_max_tu,
+    aes(
+      x = Region,
+      y = median,
+      label = round(median, digits = 2)
+    ),
+    size = 6,
+    nudge_x = -.19
+  ) +
+  scale_x_discrete(labels = c(
+    "California (n = 85)",
+    "Midwest (n = 100)",
+    "Northeast (n = 94)",
+    "Northwest (n = 87)",
+    "Southeast (n = 76)"
+  )) +
   labs(y = "Max Log TU") +
-  # stat_summary(fun = "mean", color = "forestgreen") +
   theme_bw() +
   theme(
     axis.title = element_text(size = 16),
@@ -115,10 +234,3 @@ ggsave(
   height = 30,
   units = "cm"
 )
-
-# Graphical overview of sites and max TU
-ggplot(max_tu, aes(x = max_log_tu)) +
-  geom_density() +
-  facet_wrap(. ~ Region) +
-  theme_bw()
-# Hmisc::describe(max_tu)

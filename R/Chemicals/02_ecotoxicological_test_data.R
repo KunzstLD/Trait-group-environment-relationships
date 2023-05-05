@@ -15,7 +15,7 @@ rsqa_cmax <-
     sheet = 3,
     skip = 6
   )
-
+  
 # Meta information including CAS-RN
 # Is included in the header of the table, nedds some preprocessing
 meta_rsqa_cmax <- read_xlsx(
@@ -294,7 +294,8 @@ meta_rsqa_cmax[lc50, `:=`(
   lc50_ug_l = i.conc_ug_l,
   taxon_most_sensitive = i.taxon_most_sensitive,
   ecotox_data_av = "Yes",
-  source = i.source
+  source = i.source,
+  notes = i.notes
 ),
 on = c("CASRN" = "cas")
 ]
@@ -321,4 +322,4 @@ setcolorder(meta_rsqa_cmax, c("CASRN", "Chemname"))
 #   fwrite(., file.path(path_out, "pesticides_lc50.csv"))
 
 # Save for further use in R
-# saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))
+saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))

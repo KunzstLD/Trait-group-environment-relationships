@@ -8,7 +8,7 @@ abund <- abund[, .(Region, site, STAID, taxon, species, genus, family, order, ab
 # Split into a file for each region and order
 abund_ls <- split(abund, f = abund$Region)
 names(abund_ls)[[4]] <- "Northwest" 
-abund_ls <- lapply(abund_ls, function(x) x[order(Site), ])
+abund_ls <- lapply(abund_ls, function(x) x[order(site), ])
 
 # SPEAR cannot match all taxa
 # Therefore, use lower taxonomic resolution
@@ -87,10 +87,6 @@ lapply(
 )
 
 # SPEAR results ----
-# - Not all taxa can be merged with the trait data
-    # TODO: Check how many could not be matched!
-# - Strange transformation of abundances log(4x+1)
-# - Currently obtained results are thus preliminary
 result_spear <- load_data(
     path = path_out,
     pattern = ".*exported.*.csv",
@@ -139,13 +135,73 @@ lm_spear <- list()
 for (i in names(result_spear)) {
     lm_spear[[i]] <- lm(max_log_tu ~ SPEAR_Pestizide, data = result_spear[[i]])
 }
-
 regrres_spear <- lapply(lm_spear, function(x) lm_summary_to_dt(lm_obj = x)) %>%
     rbindlist(., id = "Region")
 setnames(regrres_spear, "Pr(>|t|)", "p_value")
 regrres_spear[, Region := sub("SPEAR_", "", Region)]
+# saveRDS(regrres_spear, file.path(path_cache, "regrres_spear.rds"))
 
 # Regression results
+# regrres_spear <- readRDS(file.path(path_cache, "regrres_spear.rds"))
+regrres_spear[id == "SPEAR_Pestizide", ]
 regrres_spear[p_value <= 0.05, ]
 
-# TODO: check assumptions, same for EPT
+# Check assumptions
+png(file.path(path_paper, "Graphs", "assumptions_lm_spear_midwest.png"))
+par(mfrow = c(2,2))
+plot(lm_spear[["SPEAR_Midwest"]])
+dev.off()
+
+# Plotting
+result_spear <- rbindlist(result_spear, fill = TRUE)
+result_spear[Region == "PN", Region := "Northwest"]
+
+regrres_spear[, `:=`(
+    coord_x = rep(1.3, 10),
+    coord_y = rep(0.6, 10)
+)]
+
+ggplot(result_spear, aes(x = SPEAR_Pestizide, y = max_log_tu)) +
+    facet_wrap(as.factor(Region) ~.) +
+    geom_point() +
+    geom_smooth(
+        method = "lm",
+        formula = y ~ x,
+        se = TRUE,
+        color = "steelblue"
+    ) +
+    geom_text(data = regrres_spear[id == "SPEAR_Pestizide",], aes(
+        x = coord_x,
+        y = coord_y,
+        label = paste0(
+            "slope = ", round(Estimate, digits = 2), "\n",
+            "p = ", round(p_value, digits = 5), "\n",
+            "R2 = ", round(r_squared, digits = 3)
+        )
+    )) +
+    labs(
+        x = "SPEAR pesticides",
+        y = "Max logTU"
+    ) +
+    theme_bw() +
+    theme(
+        legend.position = "none",
+        axis.title = element_text(size = 16),
+        axis.text.x = element_text(
+            family = "Roboto Mono",
+            size = 14
+        ),
+        axis.text.y = element_text(
+            family = "Roboto Mono",
+            size = 14
+        ),
+        strip.text = element_text(
+            family = "Roboto Mono",
+            size = 14
+        )
+    )
+ggsave(file.path(path_paper, "Graphs", paste0("SPEAR_toxicity.png")),
+    width = 50,
+    height = 30,
+    units = "cm"
+)

@@ -45,7 +45,7 @@ rsqa_cmax[meta_rsqa_cmax, `:=`(cas = i.CASRN,
 # Concentrations are in ng/L, convert to uq/L
 rsqa_cmax[, cmax := cmax/1000]
 
-# Few NAs in cmax - why?
+# Few NAs in cmax
 # rsqa_cmax[is.na(cmax), ]
 
 # Some sites have no pesticides detected
@@ -203,9 +203,4 @@ tox_parent_compounds <- rsqa_cmax[max_log_tu == log_tu,] %>%
   .[pesticide %in% pot_important_degradates$Parent_compound, .N / n_sites *
       100, by = "pesticide"] %>%
   unique
-
 pot_important_degradates[Parent_compound %in% tox_parent_compounds$pesticide, ]
-
-
-
-

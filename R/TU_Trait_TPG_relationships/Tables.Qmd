@@ -44,39 +44,44 @@ source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relatio
 mtps_genera <- readRDS(file.path(path_cache, "mtps_genera.rds"))
 mtps_family <- readRDS(file.path(path_cache, "mtps_family.rds"))
 
-create_deftraits_table <- function(x) {
-  x[mean_affinity >= 0.5,
-    defining_tc := paste(trait, collapse = ", "),
-    by = "group"
-  ]
+create_deftraits_table <- function(x,
+                                   table_name) {
+    x[mean_affinity >= 0.5,
+        defining_tc := paste(trait, collapse = ", "),
+        by = "group"
+    ]
 
-  defining_traits <- x[!is.na(defining_tc), ] %>%
-    .[order(group), .(group, n_taxa_group, defining_tc)] %>%
-    unique(.)
-  defining_traits[x[trait == "sensitivity_organic", ],
-    mean_sensitivity_organic := i.mean_affinity,
-    on = "group"
-  ]
-  defining_traits[, mean_sensitivity_organic := round(mean_sensitivity_organic, digits = 4)]
-  saveRDS(defining_traits, file.path(path_cache, "defining_traits.rds"))
+    defining_traits <- x[!is.na(defining_tc), ] %>%
+        .[order(group), .(group, n_taxa_group, defining_tc)] %>%
+        unique(.)
+    defining_traits[x[trait == "sensitivity_organic", ],
+        mean_sensitivity_organic := i.mean_affinity,
+        on = "group"
+    ]
+    defining_traits[, mean_sensitivity_organic := round(mean_sensitivity_organic, digits = 4)]
 
-  reactable(
-    defining_traits[order(group), ],
-    columns = list(
-      group = colDef(name = "TPG", width = 60),
-      n_taxa_group = colDef(name = "Nr. taxa per TPG", width = 100),
-      defining_tc = colDef(
-        name = "Defining trait combinations"
-      ),
-      mean_sensitivity_organic = colDef(name = "Mean S_org", width = 100)
-    ),
-    filterable = TRUE,
-    highlight = TRUE,
-    defaultPageSize = 20
-  )
+    # save
+    saveRDS(defining_traits, file.path(path_cache, paste0(table_name,".rds")))
+    fwrite(defining_traits, file.path(path_paper, "Tables", paste0(table_name, ".csv")), sep = ";")
+
+    # interactive table
+    reactable(
+        defining_traits[order(group), ],
+        columns = list(
+            group = colDef(name = "TPG", width = 60),
+            n_taxa_group = colDef(name = "Nr. taxa per TPG", width = 100),
+            defining_tc = colDef(
+                name = "Defining trait combinations"
+            ),
+            mean_sensitivity_organic = colDef(name = "Mean S_org", width = 100)
+        ),
+        filterable = TRUE,
+        highlight = TRUE,
+        defaultPageSize = 20
+    )
 }
-# create_deftraits_table(x = mtps_genera)
-create_deftraits_table(x = mtps_family)
 
-# TODO: add taxonomic inofrmation for each TPG!
+# For North American trait DB taxa 
+create_deftraits_table(x = mtps_family, table_name = "defining_traits_family")
+create_deftraits_table(x = mtps_genera, table_name = "defining_traits_genus")
 ```

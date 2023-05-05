@@ -134,6 +134,9 @@ data_tpg_env <- lapply(data_tpg_env, function(x) {
     variable.name = "tpg")
 })
 
+# Add family label
+lapply(data_tpg_env, function(x) x[, tpg := paste0(tpg, "_fam")])
+
 ## Variable selection ----
 # Habitat vars
 # SubstrateD84.M: 84th percentile of particles on bed surface in the reach [m]
@@ -233,7 +236,6 @@ rbindlist(cor_habitat_tpgs, idcol = "region") %>%
 
 # Nutrients [mg/L]
 # CWM Traits
-# TODO: NO3 + NO2?
 pl_nutrients <- list()
 for (region in names(data_cwm_env)) {
     x <- data_cwm_env[[region]]
@@ -316,12 +318,12 @@ cwm_interactions <- lapply(data_cwm_env, function(dt) {
         fun_interactions(
             x = .,
             formulas = collect_form,
-            titles = titles_traits,
-            naming_category = "cwm_trait"
+            naming_category = "cwm_trait_interactions"
         )
 }) %>%
     rbindlist(., idcol = "region") %>%
     setnames(., "Pr(>|t|)", "p_value")
+# saveRDS(cwm_interactions, file.path(path_cache, "cwm_interactions.rds"))
 
 # Search for significant interactions with maxTU
 cwm_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
@@ -343,12 +345,12 @@ cwm_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
 
 # Calc. interactions TPGs:
 tpg <- list(
-    "T12",
-    "T5",
-    "T2",
-    "T10",
-    "T1",
-    "T8"
+    "T12_fam",
+    "T5_fam",
+    "T2_fam",
+    "T10_fam",
+    "T1_fam",
+    "T8_fam"
 )
 collect_form_tpg <- expand.grid(tpg, "~", interactions)
 titles_tpg <- collect_form_tpg$Var1
@@ -364,14 +366,55 @@ tpg_interactions <- lapply(data_tpg_env, function(dt) {
         fun_interactions(
             x = .,
             formulas = collect_form_tpg,
-            titles = titles_tpg,
-            naming_category = "tpg"
+            naming_category = "tpg_interactions"
         )
 }) %>%
     rbindlist(., idcol = "region") %>% 
     setnames("Pr(>|t|)", "p_value")
+# saveRDS(tpg_interactions, file.path(path_cache, "tpg_interactions.rds"))
 
 # Search for significant interactions with maxTU
+# Note for paper: T10 and T1 seem to correlate frequently with other variables
 tpg_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
     .[id %like% ":", ] %>%
-    .[id %like% "max\\_log\\_tu", ]
+    .[id %like% "max\\_log\\_tu", ] %>% 
+    .[tpg_interactions %like% c("T12|T5"), ]
+
+# Create Table for publication (or SI)
+cwm_interactions <- readRDS(file.path(path_cache, "cwm_interactions.rds"))
+tpg_interactions <- readRDS(file.path(path_cache, "tpg_interactions.rds"))
+rbind(
+    cwm_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
+        .[id %like% ":", ] %>%
+        .[id %like% "max\\_log\\_tu", ],
+    tpg_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
+        .[id %like% ":", ] %>%
+        .[id %like% "max\\_log\\_tu", ] %>%
+        .[tpg_interactions %like% c("T12|T5"), ],
+    fill = TRUE
+) %>%
+    .[, Formula := coalesce(cwm_trait_interactions, tpg_interactions)] %>%
+    .[id %like% "Riffle.*", id := sub("FRC", "frc", id)]  %>%
+    .[Formula %like% "Riffle.*", Formula := sub("FRC", "frc", Formula)]  %>% 
+    .[Formula %like% "NO3NO2", Formula := sub("\\_4wk", "", Formula)] %>% 
+    .[region == "PN", region := "Northwest"] %>% 
+    .[, .(region,
+        Formula,
+        id,
+        Estimate = round(Estimate, digits = 3),
+        p_value = round(p_value, digits = 4)
+    )] %>%
+    setnames(
+        .,
+        c(
+            "region",
+            "id",
+            "p_value"
+        ),
+        c(
+            "Region",
+            "Significant interaction",
+            "P value"
+        )
+    ) %>% 
+    fwrite(., file = file.path(path_paper, "Tables", "significant_interactions.csv"))

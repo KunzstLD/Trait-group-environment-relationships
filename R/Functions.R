@@ -164,13 +164,13 @@ sregr_dt <- function(x, form) {
 }
 
 # Create a data.table out of an lm summary 
-lm_summary_to_dt  <- function(lm_obj) {
-    lm_summary <- summary(lm_obj)
-    cbind(
-        coef(lm_summary),
-        "adj_r_squared" = lm_summary["adj.r.squared"]
-    ) %>%
-        as.data.table(., keep.rownames = "id")
+lm_summary_to_dt <- function(lm_obj) {
+  lm_summary <- summary(lm_obj)
+  data.table(
+    coef(lm_summary),
+    "r_squared" = lm_summary[["r.squared"]],
+    keep.rownames = "id"
+  )
 }
   
 ## Interactions ----

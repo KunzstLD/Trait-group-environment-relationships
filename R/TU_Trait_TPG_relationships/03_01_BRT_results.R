@@ -110,6 +110,16 @@ ggsave(
 xgboost_imp <- purrr::map(res_xgboost_comb, ~ sapply(.x, function(x) {
   "train" <- x$importance
 }))
+xgboost_imp <- lapply(xgboost_imp, function(x) {
+    lapply(x, function(y) as.data.table(y, keep.rownames = TRUE))
+}) %>%
+    lapply(., function(x) rbindlist(x, id = "region")) %>%
+    rbindlist(., id = "method")
+setnames(
+    xgboost_imp,
+    c("rn", "y"),
+    c("trait_TPG", "score")
+)
 traits <- unique(xgboost_imp$trait_TPG)[1:20]
 lookup_traits <- data.table(
   trait = traits,
@@ -136,16 +146,6 @@ lookup_traits <- data.table(
     "sessil"
   )
 )
-xgboost_imp <- lapply(xgboost_imp, function(x) {
-    lapply(x, function(y) as.data.table(y, keep.rownames = TRUE))
-}) %>%
-    lapply(., function(x) rbindlist(x, id = "region")) %>%
-    rbindlist(., id = "method")
-setnames(
-    xgboost_imp,
-    c("rn", "y"),
-    c("trait_TPG", "score")
-)
 
 # Top 5 per region
 # Add grouping features for cwm and cws
@@ -171,6 +171,13 @@ xgboost_imp[method == "cwm", ] %>%
 xgboost_imp[method == "cwm", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>%
   .[!is.na(score), .(region, trait_label, score = round(score, digits = 2))] %>%
+  .[region == "PN", region := "Northwest"] %>%
+  .[order(region), ] %>%
+  setnames(
+    .,
+    c("region", "trait_label", "score"),
+    c("Region", "Trait", "Impurity score")
+  ) %>%
   fwrite(., file.path(path_paper, "Tables", "Most_imp_traits.csv"))
 
 # Dominance of feeding mode traits (at least one in each region)
@@ -245,8 +252,16 @@ xgboost_imp[method == "tpgs_rel", ] %>%
 xgboost_imp[method == "tpgs_rel", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>%
   .[!is.na(score), .(region, trait_TPG, score = round(score, digits = 2))] %>% 
-  .[, trait_TPG := paste0(trait_TPG, "_genus")]  %>% 
+  .[, trait_TPG := paste0(trait_TPG, "_fam")]  %>% 
+  .[region == "PN", region := "Northwest"] %>% 
+  .[order(region), ] %>%
+  setnames(
+    .,
+    c("region", "trait_TPG", "score"),
+    c("Region", "TPG", "Impurity score")
+  ) %>% 
   fwrite(., file.path(path_paper, "Tables", "Most_imp_TPGs.csv"))
+
 
 # Genus-level approach
 xgboost_imp[method == "tpgs_rel_genus", trait_TPG := paste0(trait_TPG, "_genus")]
@@ -255,10 +270,21 @@ xgboost_imp[method == "tpgs_rel_genus", ] %>%
   .[, .N, by = "trait_TPG"] %>% 
   .[order(-N), ] 
 
+xgboost_imp[method == "tpgs_rel_genus", ] %>%
+  .[order(-score), .SD[1:5, ], by = "region"] %>% 
+  .[trait_TPG == "T1_genus", ]
+
 # Table for publication
 xgboost_imp[method == "tpgs_rel_genus", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>%
   .[!is.na(score), .(region, trait_TPG, score = round(score, digits = 2))] %>% 
+  .[region == "PN", region := "Northwest"] %>% 
+  .[order(region), ] %>%
+  setnames(
+    .,
+    c("region", "trait_TPG", "score"),
+    c("Region", "TPG", "Impurity score")
+  ) %>% 
   fwrite(., file.path(path_paper, "Tables", "Most_imp_TPGs_genus.csv"))
 
 # Load defining trait combinations
@@ -270,73 +296,86 @@ defining_traits_family[group %in% c("T1", "T2", "T8", "T10"), ]
 defining_traits_genus <- readRDS(file.path(path_cache, "defining_traits_genus.rds"))
 defining_traits_genus[, group := paste0("T", group)]
 
-# Taxonomic composition of TPGs
+# Taxonomic composition of TPGs ----
 # First glance: groups look like they are mainly composed of
 # taxa from one to two orders 
+
+## Family level ----
 tpg_taxonomic_comp_family <- readRDS(file.path(path_cache, "tpg_taxonomic_composition_family.rds"))
 tpg_taxonomic_comp_family[, group := paste0(group, "_fam")]
+tpg_taxonomic_comp_family[, group := sub("T", "TPG", group)]
 
 # Full overview table taxonomic composition
-# TODO: check warning in dcast!
 tpg_taxonomic_comp_family %>%
   .[, prop_ord := round(prop_ord, digits = 4) * 100] %>%
   .[, group := factor(group,
     levels = c(
-      "T1_fam",
-      "T2_fam",
-      "T3_fam",
-      "T4_fam",
-      "T5_fam",
-      "T6_fam",
-      "T7_fam",
-      "T8_fam",
-      "T9_fam",
-      "T10_fam",
-      "T11_fam",
-      "T12_fam",
-      "T13_fam",
-      "T14_fam",
-      "T15_fam"
+      "TPG1_fam",
+      "TPG2_fam",
+      "TPG3_fam",
+      "TPG4_fam",
+      "TPG5_fam",
+      "TPG6_fam",
+      "TPG7_fam",
+      "TPG8_fam",
+      "TPG9_fam",
+      "TPG10_fam",
+      "TPG11_fam",
+      "TPG12_fam",
+      "TPG13_fam",
+      "TPG14_fam",
+      "TPG15_fam"
     ),
     ordered = TRUE
   )] %>%
+  .[Region == "PN", Region := "Northwest"] %>% 
+  setnames(., "group", "TPG") %>% 
   dcast(., ... ~ order, value.var = "prop_ord") %>%
   fwrite(., file.path(path_paper, "Tables", "taxonomic_composition_tpgs_family.csv"))
 
-# Taxonomic composition
-tpg_taxonomic_comp[group %in% c("T5_fam", "T12_fam"), ] %>%
-  dcast(., ... ~ order, value.var = "prop_ord")%>%
-  fwrite(., file.path(path_paper, "Tables", "taxonomic_composition_tpgs_family_t5_t12.csv"))
+# Check taxonomic composition for most consistent TPG
+tpg_taxonomic_comp_family[TPG == "TPG5_fam", ] %>% 
+.[order(Region, -prop_ord), ] 
 
-# Genus lvl
+tpg_taxonomic_comp_family[TPG == "TPG12_fam", ] %>% 
+.[order(Region, -prop_ord), ]
+
+## Genus lvl ----
 tpg_taxonomic_comp_genus <- readRDS(file.path(path_cache, "tpg_taxonomic_composition_genus.rds"))
 tpg_taxonomic_comp_genus[, group := paste0(group, "_genus")]
+tpg_taxonomic_comp_genus[, group := sub("T", "TPG", group)]
 
 # Full overview table taxonomic composition
 tpg_taxonomic_comp_genus %>%
   .[, prop_ord := round(prop_ord, digits = 4) * 100] %>%
   .[, group := factor(group,
     levels = c(
-      "T1_genus",
-      "T2_genus",
-      "T3_genus",
-      "T4_genus",
-      "T5_genus",
-      "T6_genus",
-      "T7_genus",
-      "T8_genus",
-      "T9_genus",
-      "T10_genus",
-      "T11_genus",
-      "T12_genus",
-      "T13_genus",
-      "T14_genus",
-      "T15_genus"
+      "TPG1_genus",
+      "TPG2_genus",
+      "TPG3_genus",
+      "TPG4_genus",
+      "TPG5_genus",
+      "TPG6_genus",
+      "TPG7_genus",
+      "TPG8_genus",
+      "TPG9_genus",
+      "TPG10_genus",
+      "TPG11_genus",
+      "TPG12_genus",
+      "TPG13_genus",
+      "TPG14_genus",
+      "TPG15_genus"
     ),
     ordered = TRUE
   )] %>%
+  .[Region == "PN", Region := "Northwest"] %>% 
+  setnames(., "group", "TPG") %>% 
   dcast(., ... ~ order, value.var = "prop_ord") %>%
   fwrite(., file.path(path_paper, "Tables", "taxonomic_composition_tpgs_genus.csv"))
+
+# Check taxonomic composition for most consistent TPG
+tpg_taxonomic_comp_genus[TPG == "TPG1_genus", ] %>% 
+.[order(Region, -prop_ord), ] 
 
 # PDPs ----
 # For now only for Midwest

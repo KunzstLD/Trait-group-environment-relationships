@@ -59,6 +59,8 @@ data_cws$Midwest <- data_cws$Midwest[!is.na(max_log_tu), ]
 #   if ("STAID" %in% names(x)) x[, uniqueN(STAID)] else x[, uniqueN(site)]
 # }) %>% unlist %>% sum
 
+lapply(data_cwm, function(x) x[trait == "sensitivity_organic", range(cwm_val)])
+
 ## TPG data & TU data ----
 trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel.rds"))
 # trait_groups <- readRDS(file.path(path_cache, "trait_groups.rds")) 

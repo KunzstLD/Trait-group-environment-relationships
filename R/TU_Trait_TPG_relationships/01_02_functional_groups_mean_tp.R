@@ -39,11 +39,12 @@ mtps_family <- calc_mean_tps(
   taxa_id = "family"
 )
 
-trait_family[, .N, by = "order"] %>% 
-.[order(-N), ] %>% 
-fwrite(., file.path(path_out, "overview_order_tpg_family.csv"))
+# Overview over orders
+trait_family[, .N, by = "order"] %>%
+  .[order(-N), ] %>%
+  fwrite(., file.path(path_out, "overview_order_tpg_family.csv"))
 
-# Normalisation 
+# Normalisation
 # Most mean trait profiles are normalised
 # Still, for some there seems to be problems.
 # Hence, normalisation is done again
@@ -77,3 +78,13 @@ saveRDS(mtps_family,
 # TODO: how to call Qmd documents?
 # Load Tables.Qmd
 # source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/TU_Trait_TPG_relationships/Tables.Qmd")
+
+# Closer look at groups ----
+mtps_family[mean_affinity >= 0.5 & grouping_feature == "feed", .N, by = "trait"]
+
+mtps_family[mean_affinity >= 0.5, ] %>%
+  .[order(group), ] %>% 
+  .[, .(group, trait, grouping_feature)] %>% 
+  .[, group := as.character(paste0("TPG_", group))] %>% 
+  dcast(., ...~ trait, fun.aggregate = length)  %>% 
+  .[feed_filter == 0 & feed_herbivore == 0 & feed_predator == 0 & feed_gatherer == 0 & feed_shredder == 0, ]

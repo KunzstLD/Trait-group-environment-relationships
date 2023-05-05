@@ -16,21 +16,34 @@ cwm_combined <- rbindlist(data_cwm_final, idcol = "region", fill = TRUE) %>%
 lm_cwm <- cwm_combined[,
     {
         model <- lm(max_log_tu ~ cwm_val)
-        p_value <- summary(model)$coefficients["cwm_val", "Pr(>|t|)"]
+        lm_summary <- summary(model)
         .(
-            coef_trait = coef(model)["cwm_val"],
-            p_value
+            coef_trait= coef(model)[["cwm_val"]],
+            r_squared = lm_summary[["r.squared"]],
+            p_value = lm_summary$coefficients[["cwm_val", "Pr(>|t|)"]]
         )
     },
     by = c("region", "trait")
 ]
 lm_cwm[, `:=`(
-    coord_x = rep(c(
-        0.35,
-        0.3,
-        -0.5
-    ), 5),
-    coord_y = rep(-8, 15)
+    coord_x = c(
+        0.07,
+        0.05,
+        -0.75,
+        0.07,
+        0.05,
+        -0.75,
+        0.07,
+        0.05,
+        -0.75,
+        0.07,
+        0.05,
+        -0.75,
+        0.07,
+        0.05,
+        -0.75
+    ),
+    coord_y = rep(-7, 15)
 )]
 # Plot
 ggplot(cwm_combined, aes(x = cwm_val, y = max_log_tu)) +
@@ -46,8 +59,9 @@ ggplot(cwm_combined, aes(x = cwm_val, y = max_log_tu)) +
         x = coord_x,
         y = coord_y,
         label = paste0(
-            "slope = ", round(coef_trait, digits = 2), "; ",
-            "p = ", round(p_value, digits = 4)
+            "slope = ", round(coef_trait, digits = 2), "\n",
+            "p = ", round(p_value, digits = 4), "\n",
+            "R2 = ", round(r_squared, digits = 4)
         )
     )) +
     labs(
@@ -103,24 +117,68 @@ tpg_comb_family <- rbindlist(trait_groups_rel_final$family_lvl, idcol = "region"
     .[, region := fifelse(region == "PN", "Northwest", region)]
 
 # LM
-lm_tpg <- tpg_comb_family[,
+lm_tpg_family <- tpg_comb_family[,
     {
         model <- lm(max_log_tu ~ tpg_val)
-        p_value <- summary(model)$coefficients["tpg_val", "Pr(>|t|)"]
+        lm_summary <- summary(model)
         .(
-            coef_tpg = coef(model)["tpg_val"],
-            p_value
+            coef_tpg = coef(model)[["tpg_val"]],
+            r_squared = lm_summary[["r.squared"]],
+            p_value = lm_summary$coefficients[["tpg_val", "Pr(>|t|)"]]
         )
     },
     by = c("region", "tpg")
 ]
-lm_tpg[, `:=`(
-    coord_x = rep(0.11, 10),
-    coord_y = rep(-7, 10)
-)]
+
+# Genus level
+trait_groups_rel_final$genus_lvl <- lapply(
+    trait_groups_rel_final$genus_lvl,
+    function(x) {
+        setnames(
+            x,
+            tpgs_names,
+            paste0(tpgs_names, "_genus"),
+            skip_absent = TRUE
+        )
+    }
+)
+tpg_comb_genus <- rbindlist(trait_groups_rel_final$genus_lvl, idcol = "region", fill = TRUE) %>%
+    .[, .(region, T1_genus, max_log_tu)] %>%
+    melt(.,
+        id.vars = c("max_log_tu", "region"),
+        variable.name = "tpg",
+        value.name = "tpg_val"
+    ) %>%
+    .[region == "PN", region := "Northwest"]
+
+# LM
+lm_tpg_genus <- tpg_comb_genus[,
+    {
+        model <- lm(max_log_tu ~ tpg_val)
+        lm_summary <- summary(model)
+        .(
+            coef_tpg = coef(model)[["tpg_val"]],
+            r_squared = lm_summary[["r.squared"]],
+            p_value = lm_summary$coefficients[["tpg_val", "Pr(>|t|)"]]
+        )
+    },
+    by = c("region", "tpg")
+]
 
 # Plot
-ggplot(tpg_comb_family, aes(x = tpg_val, y = max_log_tu)) +
+lm_tpg <- rbind(
+    lm_tpg_family[, level := "family_level"],
+    lm_tpg_genus[, level := "genus_level"]
+)
+lm_tpg[, `:=`(
+    coord_x = rep(0.4, 15),
+    coord_y = rep(0.7, 15)
+)]
+tpg_comb <- rbind(
+    tpg_comb_family[, level := "family_level"],
+    tpg_comb_genus[, level := "genus_level"]
+)
+ggplot(tpg_comb, aes(x = tpg_val, y = max_log_tu)) +
     facet_grid(as.factor(region) ~ as.factor(tpg),
         labeller = as_labeller(c(
             "California" = "California",
@@ -129,7 +187,8 @@ ggplot(tpg_comb_family, aes(x = tpg_val, y = max_log_tu)) +
             "Northwest" = "Northwest",
             "Southeast" = "Southeast",
             "T12_fam" = "TPG12_fam",
-            "T5_fam" = "TPG5_fam"
+            "T5_fam" = "TPG5_fam",
+            "T1_genus" = "TPG1_genus"
         ))
     ) +
     geom_point() +
@@ -143,8 +202,9 @@ ggplot(tpg_comb_family, aes(x = tpg_val, y = max_log_tu)) +
         x = coord_x,
         y = coord_y,
         label = paste0(
-            "slope = ", round(coef_tpg, digits = 2), "; ",
-            "p = ", round(p_value, digits = 4)
+            "slope = ", round(coef_tpg, digits = 2), "\n",
+            "p = ", round(p_value, digits = 4),  "\n",
+            "R2 = ", round(r_squared, digits = 4)
         )
     )) +
     labs(x = "Abundance weighted fraction TPG", y = "Max logTU") +
@@ -165,59 +225,7 @@ ggplot(tpg_comb_family, aes(x = tpg_val, y = max_log_tu)) +
             size = 14
         )
     )
-ggsave(file.path(path_paper, "Graphs", paste0("rel_tpgs_logTu_family.png")),
-        width = 50,
-        height = 30,
-        units = "cm"
-    )
-
-# Genus level
-trait_groups_rel_final$genus_lvl <- lapply(
-    trait_groups_rel_final$genus_lvl,
-    function(x) {
-        setnames(
-            x,
-            tpgs_names,
-            paste0(tpgs_names, "_genus"),
-            skip_absent = TRUE
-        )
-    }
-)
-rbindlist(trait_groups_rel_final$genus_lvl, idcol = "region", fill = TRUE) %>%
-    .[, .(region, T1_genus, max_log_tu)] %>%  
-    melt(.,
-        id.vars = c("max_log_tu", "region"),
-        variable.name = "tpg",
-        value.name = "tpg_val"
-    ) %>%
-    ggplot(., aes(x = tpg_val, y = max_log_tu)) +
-    facet_grid(as.factor(region) ~ as.factor(tpg)) +
-    geom_point() +
-    geom_smooth(
-        method = "lm",
-        formula = y ~ x,
-        se = TRUE,
-        color = "steelblue"
-    ) +
-    labs(x = "Abundance weighted fraction TPG", y = "max logTU") +
-    theme_bw() +
-    theme(
-        legend.position = "none",
-        axis.title = element_text(size = 16),
-        axis.text.x = element_text(
-            family = "Roboto Mono",
-            size = 14
-        ),
-        axis.text.y = element_text(
-            family = "Roboto Mono",
-            size = 14
-        ),
-        strip.text = element_text(
-            family = "Roboto Mono",
-            size = 14
-        )
-    )
-ggsave(file.path(path_paper, "Graphs", paste0("rel_tpgs_logTu_genus.png")),
+ggsave(file.path(path_paper, "Graphs", paste0("rel_tpgs_logTu.png")),
         width = 50,
         height = 30,
         units = "cm"

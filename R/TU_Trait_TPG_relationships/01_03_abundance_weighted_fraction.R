@@ -8,6 +8,8 @@
 trait_family <- readRDS(file.path(path_cache, "trait_family_tpg.rds"))
 trait_genera <- readRDS(file.path(path_cache, "trait_genera_tpg.rds"))
 abund <- readRDS(file.path(path_cache, "total_abund_CEOPT.rds"))
+unique(abund[, .(taxon, taxonomic_level)]) %>% 
+.[, .N, by = "taxonomic_level"]
 
 # Merge TPGs
 # family level
@@ -113,6 +115,8 @@ abund_comb <- lapply(abund_comb, function(x) {
 #   weighted_fraction
 # )])
 
+# All 15 groups observed in the sampling campaign
+lapply(abund_comb, function(x) unique(x$group))
 
 # Trait groups
 # Relative fraction

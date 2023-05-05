@@ -64,25 +64,36 @@ abund_subs <- abund_subs[!is.na(max_log_tu), ]
 # abund_subs[!is.na(STAID) & duplicated(STAID),]
 
 # LM ----
-# Significant in California and Northwest
-# Negative relationship in California, Midwest, 
+# - Significant coeff. in California and Northwest
+# - Negative relationship in California, Midwest, 
 # Northwest, Southeast
-# Positive relationship in Northeast (tough not significant) -> why?
-# TODO: 
-# Check assumptions of linear models!
-EPT_regr <- abund_subs[, sregr_dt(
-    x = .SD,
-    form = "max_log_tu ~ frac_EPT"
-), by = "Region"]
-setnames(EPT_regr, "Pr(>|t|)", "p_value")
-EPT_regr[p_value <= 0.05, ]
+# - Positive relationship in Northeast (tough not significant) -> why?
+lm_ept <- list()
+for (i in unique(abund_subs$Region)) {
+    lm_ept[[i]] <- lm(max_log_tu ~ frac_EPT,
+        data = abund_subs[Region == i, ]
+    )
+}
+regrres_ept <- lapply(lm_ept, function(x) lm_summary_to_dt(lm_obj = x)) %>%
+    rbindlist(., id = "Region")
+setnames(regrres_ept, "Pr(>|t|)", "p_value")
+saveRDS(regrres_ept, file.path(path_cache, "regrres_ept.rds"))
+
+# Regression results
+# regrres_ept <- readRDS(file.path(path_cache, "regrres_ept.rds"))
+regrres_ept[id == "frac_EPT", ]
+regrres_ept[p_value <= 0.05, ]
+
+# Check assumptions
+par(mfrow = c(2,2))
+plot(lm_ept[[5]])
 
 # Plotting ----
-EPT_regr[, `:=`(
+regrres_ept[, `:=`(
     coord_x = rep(0.75, 10),
     coord_y = rep(0.8, 10)
 )]
-EPT_regr[Region == "PN", Region := "Northwest"]
+regrres_ept[Region == "PN", Region := "Northwest"]
 abund_subs[Region == "PN", Region := "Northwest"]
 
 ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
@@ -94,16 +105,17 @@ ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
         se = TRUE,
         color = "steelblue"
     ) +
-    geom_text(data = EPT_regr[id == "frac_EPT", ], aes(
+    geom_text(data = regrres_ept[id == "frac_EPT", ], aes(
         x = coord_x,
         y = coord_y,
         label = paste0(
             "slope = ", round(Estimate, digits = 2), "\n",
-            "p = ", round(p_value, digits = 4)
+            "p = ", round(p_value, digits = 4), "\n",
+            "R2 = ", round(r_squared, digits = 3)
         )
     )) +
     labs(
-        x = "Fraction EPT taxa on the whole assemblage",
+        x = "Fraction EPT taxa per site",
         y = "Max logTU"
     ) +
     theme_bw() +
