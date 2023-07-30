@@ -386,15 +386,16 @@ perform_xgboost <- function(x,
     # Minimum loss reduction required to make a
     # further partition on a leaf node.
     # The larger, the more conservative the algorithm will be
-    lambda = to_tune(p_dbl(lower = 0, upper = 10)),
+    # lambda = to_tune(p_dbl(lower = 0, upper = 10)),
     # shrinks features without removing them, L2 regularization
+    # the larger the more conservative
     booster = "gbtree",
-    eta = to_tune(p_dbl(lower = 0.001, upper = 1)),
+    eta = to_tune(p_dbl(lower = 0.01, upper = 1)),
     # controlling the learning rate to prevent overfitting
     # (scaling of the contrib. of each tree by a factor 0-1 when added)
     # low values means more nrounds
     # (robust to overfitting but also slower to compute)
-    max_depth = to_tune(p_int(lower = 2L, upper = 15L)),
+    max_depth = to_tune(p_int(lower = 2L, upper = 10L)),
     subsample = to_tune(p_dbl(lower = 0.1, upper = 1)),
     nrounds = to_tune(p_int(lower = 10, upper = 100)),
     # number of boosting rounds
@@ -564,6 +565,43 @@ perform_xgboost <- function(x,
 #     # pdp_ls[[region]] <- model_profile(xgboost_exp)$agr_profiles
 #   }
 # }
+
+# Bootstrapping to estimate confindence intervals for the 
+# prediction and test errors
+bootstrap_ci_rmse <- function(
+    x,
+    model,
+    split_ratio = 0.8,
+    features,
+    n_bootstraps = 1000) {
+  # split in training and test data
+  # same seed that was used during model training
+  # to obtain the same training and test data
+  set.seed(1234)
+  ind <- sample(1:nrow(x), size = round(nrow(x) * split_ratio))
+  train <- x[ind, .SD, .SDcols = names(x) %in% c(
+    features,
+    "max_log_tu"
+  )]
+  test <- x[-ind, .SD, .SDcols = names(x) %in% c(
+    features,
+    "max_log_tu"
+  )]
+
+  # bootestrapped CIs
+  train_rmse_samples <- numeric(n_bootstraps)
+  test_rmse_samples <- numeric(n_bootstraps)
+  for (i in 1:n_bootstraps) {
+    train_sample <- train[sample(.N, replace = TRUE), ]
+    test_sample <- test[sample(.N, replace = TRUE), ]
+    train_rmse_samples[[i]] <- model$predict_newdata(newdata = train_sample)$score(mlr3::msr("regr.rmse"))
+    test_rmse_samples[[i]] <- model$predict_newdata(newdata = test_sample)$score(mlr3::msr("regr.rmse"))
+  }
+  list(
+    "CI_rmse_train" = quantile(train_rmse_samples, c(0.025, 0.975)),
+    "CI_rmse_test" = quantile(test_rmse_samples, c(0.025, 0.975))
+  )
+}
 
 # General helper functions ----
 

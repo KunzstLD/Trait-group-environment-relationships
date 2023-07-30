@@ -20,13 +20,14 @@ library(worms)
 library(standartox)
 library(chemlook)
 
-# Plotting
+# Plotting & tables
 library(ggplot2)
 library(reactable)
 library(htmltools)
 library(patchwork)
 library(ggsci)
 library(GGally)
+library(broom)
 
 # Distance matrices and clustering
 library(ade4)
@@ -44,6 +45,10 @@ library(xgboost)
 library(paradox)
 library(DALEX)
 library(DALEXtra)
+
+# LM and GAMs
+library(DHARMa)
+library(mgcv)
 
 ## Paths
 path_in <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Data"
