@@ -10,6 +10,7 @@ trait_genera <- readRDS(file.path(path_cache, "trait_genera_tpg.rds"))
 abund <- readRDS(file.path(path_cache, "total_abund_CEOPT.rds"))
 unique(abund[, .(taxon, taxonomic_level)]) %>% 
 .[, .N, by = "taxonomic_level"]
+trait_genera$order %>% unique
 
 # Merge TPGs
 # family level
@@ -25,6 +26,10 @@ abund[trait_genera, group_genus := i.group, on = "genus"]
 # unique(abund[is.na(group), .(family, order), by = "Region"])
 # also not used in CWM approach?
 
+# Some taxa have a relatively high abundance (up to > 8000)
+# use sqrt tranformation
+# abund[, .(min(abundance), max(abundance)), by = "Region"]
+abund[, abundance := sqrt(abundance)]
 
 # Abundance weighted fraction
 abund_family <- abund[!is.na(group_family),]
@@ -115,8 +120,15 @@ abund_comb <- lapply(abund_comb, function(x) {
 #   weighted_fraction
 # )])
 
-# All 15 groups observed in the sampling campaign
-lapply(abund_comb, function(x) unique(x$group))
+# All 15 groups observed in the sampling campaign but not in every region!
+lapply(abund_comb, function(x) x[, uniqueN(group), by = "Region"])
+# TPG11 and TPG14 do not occur in all regions
+abund_comb$family_lvl[, .N, by = c("group")] %>% .[order(N), ]
+abund_comb$family_lvl[group == "T11", Region] %>% unique()
+abund_comb$family_lvl[group == "T14", Region] %>% unique()
+
+# TPG7_genus for genus lvl trait data
+abund_comb$genus_lvl[, .N, by = c("group")] %>% .[order(N), ]
 
 # Trait groups
 # Relative fraction
