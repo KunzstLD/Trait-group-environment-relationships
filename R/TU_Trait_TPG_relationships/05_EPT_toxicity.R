@@ -28,13 +28,15 @@ abund[STAID == "T03611200", STAID := "T03611100"]
 abund[site == "T12073525", site := "T12073425"]
 # save this version of the abundance data with improved STAID labels 
 # and the site IDs changed for later use
-saveRDS(abund, file.path(path_cache, "total_abund_CEOPT_corrected.rds"))
+# saveRDS(abund, file.path(path_cache, "total_abund_CEOPT_corrected.rds"))
 
 # Toxicity
 max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
 setnames(max_tu, "TSITE_NO_WQ", "site")
 
 # Calculate Fraction EPT of the whole assemblage per site
+# apply sqrt transformation
+abund[, abundance := sqrt(abundance)]
 abund[, abund_order_site := sum(abundance), by = c("site", "order")]
 abund[, total_abund := sum(abundance), by = "site"]
 abund[order %in% c("Ephemeroptera", "Plecoptera", "Trichoptera"),
@@ -57,66 +59,74 @@ abund_subs[max_tu[Region == "Midwest"],
     max_log_tu := i.max_log_tu,
     on = c("STAID" = "site")
 ]
+abund_subs[Region == "PN", Region := "Northwest"]
 
 # Few sites don't have chemical information
 abund_subs <- abund_subs[!is.na(max_log_tu), ]
 # Few STAIDs are duplicates (same chemical info, but different ecology)
 # abund_subs[!is.na(STAID) & duplicated(STAID),]
 
-# LM ----
+# GAMs & LMs ----
 # - Significant coeff. in California and Northwest
 # - Negative relationship in California, Midwest, 
 # Northwest, Southeast
 # - Positive relationship in Northeast (tough not significant) -> why?
 lm_ept <- list()
+sim_res_ept <- list()
+gam_ept <- list()
+gam_assump_ept <- list()
 for (i in unique(abund_subs$Region)) {
     lm_ept[[i]] <- lm(max_log_tu ~ frac_EPT,
         data = abund_subs[Region == i, ]
     )
+
+    sim_res_ept[[i]] <- simulateResiduals(fittedModel = lm_ept[[i]])
+
+    gam_ept[[i]] <- gam(
+        max_log_tu ~ s(frac_EPT),
+        data = abund_subs[Region == i, ],
+        method = "REML"
+    )
+
+    gam_assump_ept[[i]] <- gam.check(gam_ept[[i]])
 }
-regrres_ept <- lapply(lm_ept, function(x) lm_summary_to_dt(lm_obj = x)) %>%
-    rbindlist(., id = "Region")
-setnames(regrres_ept, "Pr(>|t|)", "p_value")
-saveRDS(regrres_ept, file.path(path_cache, "regrres_ept.rds"))
 
-# Regression results
-# regrres_ept <- readRDS(file.path(path_cache, "regrres_ept.rds"))
-regrres_ept[id == "frac_EPT", ]
-regrres_ept[p_value <= 0.05, ]
+## Diagnostics ----
+# GAM
+# All linear except Midwest
+par(mfrow = c(2,3))
+for(i in names(gam_ept)){
+    plot(gam_ept[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
+}
+lapply(gam_ept, summary)
 
-# Check assumptions
-par(mfrow = c(2,2))
-plot(lm_ept[[5]])
+# LM
+for(i in names(sim_res_ept)){
+    plot(sim_res_ept[[i]], main = i)
+}
+
 
 # Plotting ----
-regrres_ept[, `:=`(
-    coord_x = rep(0.75, 10),
-    coord_y = rep(0.8, 10)
-)]
-regrres_ept[Region == "PN", Region := "Northwest"]
-abund_subs[Region == "PN", Region := "Northwest"]
-
 ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
     facet_wrap(as.factor(Region) ~.) +
-    geom_point() +
+    geom_point(alpha = 0.5, shape = 1, size = 2) +
     geom_smooth(
+        data = ~ .x[Region != "Midwest", ],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
         color = "steelblue"
     ) +
-    geom_text(data = regrres_ept[id == "frac_EPT", ], aes(
-        x = coord_x,
-        y = coord_y,
-        label = paste0(
-            "slope = ", round(Estimate, digits = 2), "\n",
-            "p = ", round(p_value, digits = 4), "\n",
-            "R2 = ", round(r_squared, digits = 3)
-        )
-    )) +
     labs(
         x = "Fraction EPT taxa per site",
         y = "Max logTU"
+    ) + 
+    geom_smooth(
+        data = ~ .x[Region == "Midwest", ],
+        method = "gam",
+        formula = y ~ s(x),
+        se = TRUE,
+        color = "steelblue"
     ) +
     theme_bw() +
     theme(
@@ -135,8 +145,75 @@ ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
             size = 14
         )
     )
-ggsave(file.path(path_paper, "Graphs", paste0("EPT_toxicity.png")),
-    width = 50,
-    height = 30,
+ggsave(file.path(path_paper, "Graphs", "EPT_toxicity.png"),
+    width = 35,
+    height = 40,
     units = "cm"
 )
+
+# Summary Table EPT ----
+ept_table <- rbind(
+    lapply(
+        lm_ept[c("California", "Northeast", "Northwest", "Southeast")],
+        function(x) {
+            broom::tidy(x)
+        }
+    ) %>%
+        rbindlist(., idcol = "Region") %>%
+        setnames(., "statistic", "t"),
+    rbind(
+        lapply(
+            gam_ept["Midwest"],
+            function(x) {
+                broom::tidy(x, parametric = TRUE)
+            }
+        ) %>%
+            rbindlist(., idcol = "Region") %>%
+            setnames(., "statistic", "t"),
+        lapply(
+            gam_ept["Midwest"],
+            function(x) {
+                broom::tidy(x, parametric = FALSE)
+            }
+        ) %>%
+            rbindlist(., idcol = "Region") %>%
+            setnames(
+                .,
+                c("statistic", "p.value"),
+                c("F", "p.value_gam")
+            ),
+        fill = TRUE
+    ),
+    fill = TRUE
+)
+ept_gof <- lapply(lm_ept, broom::glance) %>%
+    rbindlist(., idcol = "Region")
+ept_gof[, r.squared := round(r.squared*100, 2)]
+
+ept_table[, `:=`(
+    estimate = round(estimate, digits = 2),
+    std.error = round(std.error, digits = 2),
+    t = round(t, digits = 2),
+    F = round(F, digits = 2),
+    p.value = fifelse(
+        round(p.value, digits = 3) == 0,
+        "<0.01",
+        paste(round(p.value, digits = 3))
+    ),
+    p.value_gam = fifelse(
+        round(p.value_gam, digits = 3) == 0,
+        "<0.01",
+        paste(round(p.value_gam, digits = 3))
+    ), 
+    edf = round(edf, digits = 2),
+    ref.df = round(ref.df, digits = 2)
+)]
+ept_table[ept_gof[Region != "Midwest", ],
+    r.squared := i.r.squared,
+    on = "Region"
+]
+setcolorder(
+    ept_table,
+    c("Region", "term", "estimate", "std.error", "t", "p.value", "r.squared")
+)
+fwrite(ept_table, file.path(path_paper, "Tables", "EPT_log_tu_results.csv"))
