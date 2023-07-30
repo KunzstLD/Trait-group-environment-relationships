@@ -16,6 +16,9 @@ rsqa_cmax[meta_rsqa_cmax[ecotox_data_av == "Yes", ],
   on = c(cas = "CASRN")
 ]
 
+# Critical degradates?
+# rsqa_cmax[pesticide %in% c("Diazinon oxon", "Tebupirimfos oxon") & cmax > 0, TSITE_NO_WQ] 
+
 # Occr. pesticides overall
 rsqa_cmax[cmax > 0, n_occr_pesticide := .N, by = "pesticide"]
 rsqa_cmax[, n_occr_pesticide := n_occr_pesticide / n_sites]
@@ -122,6 +125,13 @@ meta_rsqa_cmax[, Pesticide_use_group := fcase(
 
 # Dominating pesticides
 max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
+# max_tu[TSITE_NO_WQ %in% c(
+#   "T06804000",
+#   "T451244123050200",
+#   "T452538122213700",
+#   "T05458800",
+#   "T410133082465301"
+# ), ]
 
 # Overview over log max TU
 summary_max_tu <- max_tu[, lapply(summary_funs, function(f) f(max_log_tu)),
