@@ -26,7 +26,7 @@ xgboost_perform <- readRDS(file.path(path_cache, "xgboost_perform.rds"))
 
 # Publication table
 perform_publ_tbl <- xgboost_perform[
-  method %in% c("cwm", "tpgs_rel", "tpgs_rel_genus"),
+  method %in% c("cwm", "tpgs_rel_family", "tpgs_rel_genus"),
   .(
     method,
     region,
@@ -42,66 +42,27 @@ setcolorder(
   c(
     "region",
     "cwm_train_mse",
-    "tpgs_rel_train_mse",
-    "tpgs_rel_genus_train_mse",
     "cwm_test_mse",
-    "tpgs_rel_test_mse",
+    "tpgs_rel_family_train_mse",
+    "tpgs_rel_family_test_mse",
+    "tpgs_rel_genus_train_mse",
     "tpgs_rel_genus_test_mse"
   )
+)
+setnames(
+  perform_publ_tbl,
+  names(perform_publ_tbl),
+  c("Region",
+  "MSE Train CWM",
+  "MSE Test CWM",
+  "MSE Train TPG (family)",
+  "MSE Test TPG (family)",
+  "MSE Train TPGS (genus)",
+  "MSE Test TPG (genus)")
 )
 fwrite(
   perform_publ_tbl,
   file.path(path_paper, "Tables", "xgboost_perfom.csv")
-)
-
-# Plot
-xgboost_perform %>%
-  melt(.,
-    id.vars = c("region", "method"),
-    value.name = "rmse"
-  ) %>%
-  ggplot(., aes(x = method, y = rmse)) +
-  geom_col(aes(fill = as.factor(variable)),
-    position = "dodge",
-    width = 0.6
-  ) +
-  scale_fill_d3(labels = c("Test", "Train")) +
-  coord_flip() +
-  labs(
-    x = "",
-    y = "RMSE",
-    fill = ""
-  ) +
-  facet_wrap(. ~ region) +
-  theme_bw() +
-  theme(
-    axis.title = element_text(size = 16),
-    axis.text.x = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    axis.text.y = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    strip.text = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    legend.text = element_text(
-      family = "Roboto Mono",
-      size = 14
-    )
-  )
-ggsave(
-  filename = file.path(
-    path_out,
-    "Graphs",
-    "perform_xgboost.png"
-  ),
-  width = 35,
-  height = 20,
-  units = "cm"
 )
 
 # Most important traits ----
@@ -125,24 +86,24 @@ lookup_traits <- data.table(
   trait = traits,
   trait_label = c(
     "predator",
-    "burrowing",
     "large size",
-    "gatherer",
-    "sens. organic",
-    "shredder",
-    "bi/multivolt.",
-    "swimming",
-    "plast. & spi.",
     "gills",
+    "swimming",
+    "gatherer",
+    "burrowing",
+    "bi/multivolt.",
     "medium size",
-    "parasite",
-    "crawling",
-    "univolt.",
     "herbivore",
-    "semivolt.",
+    "crawling",
     "filterer",
-    "tegument",
+    "univolt.",
+    "semivolt.",
+    "plastron & spi.",
+    "parasite",
     "small size",
+    "S_org",
+    "shredder",
+    "tegument",
     "sessil"
   )
 )
@@ -158,7 +119,9 @@ xgboost_imp[lookup_traits,
 ]
 
 # CWM:
-# predator 4, gatherer 3 , sensitivity organic 3
+# size large 3 times,
+# many traits two times: small, gills, gatherer, volt_bi_multi, S_org,
+# volt_semi, predator, swimming, filterer
 xgboost_imp[method == "cwm", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>% 
   .[, .N, by = "trait_TPG"] %>% 
@@ -180,76 +143,24 @@ xgboost_imp[method == "cwm", ] %>%
   ) %>%
   fwrite(., file.path(path_paper, "Tables", "Most_imp_traits.csv"))
 
-# Dominance of feeding mode traits (at least one in each region)
-# then locomotion 
+# Dominance of feeding mode traits
+# (4 regions)
 xgboost_imp[method == "cwm", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>% 
   .[, .N, by = c("grouping_feature", "region")] %>% 
   .[order(grouping_feature, -N), ]
 
-# Plot most important traits
-xgboost_imp[method == "cwm", ] %>%
-  .[order(-score), .SD[1:5, ], by = "region"] %>%
-  ggplot(
-    .,
-    aes(
-      x = as.factor(region),
-      y = score,
-      group = as.factor(trait_TPG)
-    )
-  ) +
-  geom_col(
-    position = "dodge"
-  ) +
-  geom_text(
-    mapping = aes(
-      label = as.factor(trait_TPG),
-      group = as.factor(trait_TPG)
-    ),
-    position = position_dodge(width = .9),
-    size = 4.1,
-    hjust = -0.1
-  ) +
-  lims(y = c(0, 0.5)) +
-  labs(
-    x = "Region",
-    y = "Impurity importance"
-  ) +
-  coord_flip() +
-  theme_bw() +
-  theme(
-    axis.title = element_text(size = 16),
-    axis.text.x = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    axis.text.y = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    legend.title = element_text(
-      family = "Roboto Mono",
-      size = 16
-    ),
-    legend.text = element_text(
-      family = "Roboto Mono",
-      size = 14
-    ),
-    legend.position = "none",
-    panel.grid = element_blank()
-  )
-
-# Abundance weighted fraction (TPGS_REL)
+# Abundance weighted fraction (TPGS_REL) ----
 # Family-level approach
-# T12, T5 in 4 regions
-# T2, T10, T1, T8 in 3 regions 
-xgboost_imp[method == "tpgs_rel", ] %>%
+# T1 in 4 regions
+# T2, T5, T8, T9, T12, T10 in 3 regions 
+xgboost_imp[method == "tpgs_rel_family", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>% 
   .[, .N, by = "trait_TPG"] %>% 
   .[order(-N), ] 
 
 # Table for publication
-xgboost_imp[method == "tpgs_rel", ] %>%
+xgboost_imp[method == "tpgs_rel_family", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>%
   .[!is.na(score), .(region, trait_TPG, score = round(score, digits = 2))] %>% 
   .[, trait_TPG := paste0(trait_TPG, "_fam")]  %>% 
@@ -262,8 +173,8 @@ xgboost_imp[method == "tpgs_rel", ] %>%
   ) %>% 
   fwrite(., file.path(path_paper, "Tables", "Most_imp_TPGs.csv"))
 
-
 # Genus-level approach
+# T4, T10, T12 in three regions
 xgboost_imp[method == "tpgs_rel_genus", trait_TPG := paste0(trait_TPG, "_genus")]
 xgboost_imp[method == "tpgs_rel_genus", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>% 
@@ -271,13 +182,13 @@ xgboost_imp[method == "tpgs_rel_genus", ] %>%
   .[order(-N), ] 
 
 xgboost_imp[method == "tpgs_rel_genus", ] %>%
-  .[order(-score), .SD[1:5, ], by = "region"] %>% 
-  .[trait_TPG == "T1_genus", ]
+  .[trait_TPG %in% c("T4_genus", "T10_genus", "T12_genus"), ]
 
 # Table for publication
 xgboost_imp[method == "tpgs_rel_genus", ] %>%
   .[order(-score), .SD[1:5, ], by = "region"] %>%
   .[!is.na(score), .(region, trait_TPG, score = round(score, digits = 2))] %>% 
+  .[, trait_TPG := paste0("TPG", sub("T", "", trait_TPG), "_genus")]  %>% 
   .[region == "PN", region := "Northwest"] %>% 
   .[order(region), ] %>%
   setnames(
@@ -288,22 +199,14 @@ xgboost_imp[method == "tpgs_rel_genus", ] %>%
   fwrite(., file.path(path_paper, "Tables", "Most_imp_TPGs_genus.csv"))
 
 # Load defining trait combinations
-defining_traits_family <- readRDS(file.path(path_cache, "defining_traits_family.rds"))
-defining_traits_family[, group := paste0("T", group)]
-defining_traits_family[group %in% c("T5", "T12"), ]
-defining_traits_family[group %in% c("T1", "T2", "T8", "T10"), ]
-
-defining_traits_genus <- readRDS(file.path(path_cache, "defining_traits_genus.rds"))
-defining_traits_genus[, group := paste0("T", group)]
+# defining_traits_family <- readRDS(file.path(path_cache, "defining_traits_family.rds"))
+# defining_traits_genus <- readRDS(file.path(path_cache, "defining_traits_genus.rds"))
 
 # Taxonomic composition of TPGs ----
-# First glance: groups look like they are mainly composed of
-# taxa from one to two orders 
-
 ## Family level ----
 tpg_taxonomic_comp_family <- readRDS(file.path(path_cache, "tpg_taxonomic_composition_family.rds"))
 tpg_taxonomic_comp_family[, group := paste0(group, "_fam")]
-tpg_taxonomic_comp_family[, group := sub("T", "TPG", group)]
+tpg_taxonomic_comp_family[, group := paste0("TPG", group)]
 
 # Full overview table taxonomic composition
 tpg_taxonomic_comp_family %>%
@@ -334,16 +237,28 @@ tpg_taxonomic_comp_family %>%
   fwrite(., file.path(path_paper, "Tables", "taxonomic_composition_tpgs_family.csv"))
 
 # Check taxonomic composition for most consistent TPG
-tpg_taxonomic_comp_family[TPG == "TPG5_fam", ] %>% 
+tpg_taxonomic_comp_family[TPG == "TPG1_fam", ] %>% 
 .[order(Region, -prop_ord), ] 
 
-tpg_taxonomic_comp_family[TPG == "TPG12_fam", ] %>% 
-.[order(Region, -prop_ord), ]
+tpg_taxonomic_comp_family[TPG %in% c(
+  "TPG2_fam", 
+  "TPG5_fam",
+  "TPG8_fam",
+  "TPG9_fam",
+  "TPG10_fam",
+  "TPG12_fam"), ] %>%
+.[order(Region, TPG, -prop_ord), ] 
+
+# Composition for those TPGs on family level that did not occur in every region 
+tpg_taxonomic_comp_family[TPG %in% c(
+  "TPG11_fam",
+  "TPG14_fam"
+), ]
+
 
 ## Genus lvl ----
 tpg_taxonomic_comp_genus <- readRDS(file.path(path_cache, "tpg_taxonomic_composition_genus.rds"))
-tpg_taxonomic_comp_genus[, group := paste0(group, "_genus")]
-tpg_taxonomic_comp_genus[, group := sub("T", "TPG", group)]
+tpg_taxonomic_comp_genus[, group := paste0("TPG", group, "_genus")]
 
 # Full overview table taxonomic composition
 tpg_taxonomic_comp_genus %>%
@@ -374,8 +289,16 @@ tpg_taxonomic_comp_genus %>%
   fwrite(., file.path(path_paper, "Tables", "taxonomic_composition_tpgs_genus.csv"))
 
 # Check taxonomic composition for most consistent TPG
-tpg_taxonomic_comp_genus[TPG == "TPG1_genus", ] %>% 
+tpg_taxonomic_comp_genus[TPG == "TPG4_genus", ] %>% 
 .[order(Region, -prop_ord), ] 
+tpg_taxonomic_comp_genus[TPG == "TPG10_genus" , ] %>% 
+.[order(Region, -prop_ord), ] 
+tpg_taxonomic_comp_genus[TPG == "TPG12_genus" , ] %>% 
+.[order(Region, -prop_ord), ]
+
+# TPG7_genus not found in all regions
+tpg_taxonomic_comp_genus[TPG == "TPG7_genus", ] %>% 
+ .[order(Region, -prop_ord), ] 
 
 # PDPs ----
 # For now only for Midwest

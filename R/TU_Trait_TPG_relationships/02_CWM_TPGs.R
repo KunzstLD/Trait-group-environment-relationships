@@ -36,6 +36,11 @@ trait_matrix_lf <- melt(
 # Match trait data
 abund <- readRDS(file.path(path_cache, "total_abund_CEOPT.rds"))
 
+# Some taxa have a relatively high abundance (up to > 8000)
+# use sqrt tranformation
+# abund[, .(min(abundance), max(abundance)), by = "Region"]
+abund[, abundance := sqrt(abundance)]
+
 # Few taxa cannot be considered (see also trait matching section)
 # unique(abund[!family %in% trait_matrix$family, family])
 

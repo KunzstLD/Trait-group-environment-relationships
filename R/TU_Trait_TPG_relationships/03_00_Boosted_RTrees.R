@@ -16,10 +16,12 @@
 # Community weighted and community sum traits
 data_cwm <- readRDS(file.path(path_cache, "data_cwm.rds"))
 data_cws <- readRDS(file.path(path_cache, "data_cws.rds"))
+lapply(data_cwm, function(x) x[trait == "sensitivity_organic", range(cwm_val)])
 
 # Toxicitiy
 max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
 setnames(max_tu, "TSITE_NO_WQ", "site")
+# max_tu[max_log_tu == -5, .N, by = "Region"]
 
 # Few sites have two IDs (for eco and wq)
 # because chemical and eco information were taken from slightly
@@ -59,8 +61,6 @@ data_cws$Midwest <- data_cws$Midwest[!is.na(max_log_tu), ]
 #   if ("STAID" %in% names(x)) x[, uniqueN(STAID)] else x[, uniqueN(site)]
 # }) %>% unlist %>% sum
 
-lapply(data_cwm, function(x) x[trait == "sensitivity_organic", range(cwm_val)])
-
 ## TPG data & TU data ----
 trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel.rds"))
 # trait_groups <- readRDS(file.path(path_cache, "trait_groups.rds")) 
@@ -97,6 +97,7 @@ c(trait_groups_rel_family, trait_groups_rel_genus) %<-% trait_groups_rel[c(
 ## CWM ----
 trait_names <- unique(data_cwm$California$trait)
 res_xgboost_cwm <- list()
+
 for (region in names(data_cwm)) {
   x <- dcast(data_cwm[[region]], site + max_log_tu ~ trait,
     value.var = "cwm_val"
@@ -107,9 +108,32 @@ for (region in names(data_cwm)) {
     id = region
   )
 }
-# saveRDS(res_xgboost_cwm, file.path(path_cache, "res_xgboost_cwm.rds"))
-res_xgboost_cwm$Midwest$importance
-res_xgboost_cwm$Midwest$pred_test^2
+saveRDS(res_xgboost_cwm, file.path(path_cache, "res_xgboost_cwm.rds"))
+# should also save the tuned models!
+lapply(res_xgboost_cwm, function(x) c(x$pred_train^2, x$pred_test^2))
+lapply(res_xgboost_cwm, function(x) x$importance)
+lapply(res_xgboost_cwm, function(x) x$instance)
+
+# Check predictions for test data
+# set.seed(1234)
+# midwest <- dcast(data_cwm$Midwest, site + max_log_tu ~ trait,
+#   value.var = "cwm_val"
+# )
+# ind <- sample(1:nrow(midwest), size = round(nrow(midwest) * 0.8))
+# train_midwest <- midwest[ind, .SD, .SDcols = c(
+#   trait_names,
+#   "max_log_tu"
+# )]
+# test <- midwest[-ind, .SD, .SDcols = c(
+#   trait_names,
+#   "max_log_tu"
+# )]
+
+# pred_train_midwest <- res_xgboost_cwm$Midwest$final_model$predict_newdata(newdata = train_midwest)
+# as.data.table(pred_train_midwest) %>% 
+# .[, abs_dev := abs(truth - response)] %>% 
+# ggplot(., aes(x = truth, y = response)) +
+# geom_point()
 
 
 ## CWS ----
@@ -136,7 +160,10 @@ for (region in names(trait_groups_rel_family)) {
     id = region
   )
 }
-# saveRDS(res_xgboost_tpgs_rel_family, file.path(path_cache, "res_xgboost_tpgs_rel_family.rds"))
+lapply(res_xgboost_tpgs_rel_family, function(x) c(x$pred_train^2, x$pred_test^2))
+lapply(res_xgboost_tpgs_rel_family, function(x) x$importance)
+lapply(res_xgboost_tpgs_rel_family, function(x) x$instance)
+saveRDS(res_xgboost_tpgs_rel_family, file.path(path_cache, "res_xgboost_tpgs_rel_family.rds"))
 
 res_xgboost_tpgs_rel_genus <- list()
 for (region in names(trait_groups_rel_genus)) {
@@ -148,7 +175,9 @@ for (region in names(trait_groups_rel_genus)) {
   )
 }
 saveRDS(res_xgboost_tpgs_rel_genus, file.path(path_cache, "res_xgboost_tpgs_rel_genus.rds"))
-# lapply(res_xgboost_tpgs_rel_genus, function(x) c(x$pred_test^2, x$pred_train^2))
+lapply(res_xgboost_tpgs_rel_genus, function(x) c(x$pred_train^2, x$pred_test^2))
+lapply(res_xgboost_tpgs_rel_genus, function(x) x$importance)
+lapply(res_xgboost_tpgs_rel_genus, function(x) x$instance)
 
 # ## TPGs absolute fraction ----
 # res_xgboost_tpgs <- list()
