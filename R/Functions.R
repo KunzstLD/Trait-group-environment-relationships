@@ -174,23 +174,16 @@ lm_summary_to_dt <- function(lm_obj) {
 }
   
 ## Interactions ----
-fun_interactions <- function(x,
-                             formulas,
-                             naming_category) {
-    regr_interactions <- lapply(
-        formulas,
-        function(form) {
-            summary(lm(form, data = x)) %>%
-                coef(.) %>%
-                as.data.table(., keep.rownames = "id")
-        }
-    )
-    names(regr_interactions) <- formulas
-    regr_interactions <- rbindlist(
-        regr_interactions,
-        idcol = naming_category
-    )
-    regr_interactions
+fun_interactions <- function(x, formula) {
+    lapply(formula, function(fo) {
+        lm_obj <- lm(fo, data = x)
+        cbind(
+            broom::tidy(lm_obj),
+            broom::glance(lm_obj)[c("r.squared", "adj.r.squared")],
+            fo
+        )
+    }) %>%
+        rbindlist(.)
 }
 
 ## Cluster analysis ----

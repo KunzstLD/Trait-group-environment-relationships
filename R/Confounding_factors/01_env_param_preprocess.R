@@ -47,16 +47,6 @@ env_param <- fread(file.path(
 ))
 setnames(env_param, "TSTAID", "site")
 
-# CWM traits and abundance weighted fraction TPGs (family level)
-data_cwm <- readRDS(file.path(path_cache, "data_cwm_final.rds"))
-trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel_final.rds"))
-trait_groups_rel <- trait_groups_rel$family_lvl
-
-# Sites that contian biological information
-sites_bio <- lapply(data_cwm, function(x) {
-    if ("STAID" %in% names(x)) unique(x$STAID) else unique(x$site)
-}) %>% Reduce(c, .)
-
 # Subset to sites with biological info
 env_param <- env_param[`Has Inverts` == "y" & site %in% sites_bio, ]
 
@@ -73,6 +63,17 @@ env_param <- env_param[, .(
     NO3NO2_4wk.median
 )]
 
+# CWM traits and abundance weighted fraction TPGs (family level)
+data_cwm <- readRDS(file.path(path_cache, "data_cwm_final.rds"))
+trait_groups_rel <- readRDS(file.path(path_cache, "trait_groups_rel_final.rds"))
+trait_groups_rel_fam <- trait_groups_rel$family_lvl
+trait_groups_rel_genus <- trait_groups_rel$genus_lvl
+
+# Sites that contian biological information
+sites_bio <- lapply(data_cwm, function(x) {
+    if ("STAID" %in% names(x)) unique(x$STAID) else unique(x$site)
+}) %>% Reduce(c, .)
+
 # Merge with biological data & toxicity data
 # Responding CWMtraits: gatherer, predator, sens. organic
 data_cwm_env <- lapply(data_cwm, function(x) {
@@ -88,7 +89,9 @@ data_cwm_env <- lapply(data_cwm, function(x) {
         NO3NO2_4wk.median = i.NO3NO2_4wk.median
     ), on = on]
 })
-data_tpg_env <- lapply(trait_groups_rel, function(x) {
+saveRDS(data_cwm_env, file.path(path_cache, "data_cwm_env.rds"))
+
+data_tpg_env_fam <- lapply(trait_groups_rel_fam, function(x) {
     on <- if ("STAID" %in% names(x)) c("STAID" = "site") else "site"
     x[env_param, `:=`(
         SubstrateD84.M = i.SubstrateD84.M,
@@ -103,7 +106,9 @@ data_tpg_env <- lapply(trait_groups_rel, function(x) {
 })
 
 # subset to most responsive TPGs
-data_tpg_env <- lapply(data_tpg_env, function(x) {
+# Family-level: TPG1_fam, TPG2_fam, TPG5_fam,
+# TPG8_fam, TPG9_fam, TPG10_fam, and TPG12_fam
+data_tpg_env_fam <- lapply(data_tpg_env_fam, function(x) {
     melt(x[, .SD,
         .SDcols = c(
             "site",
@@ -116,26 +121,75 @@ data_tpg_env <- lapply(data_tpg_env, function(x) {
             "orthoP_4wk.median",
             "NO3NO2_4wk.median",
             "max_log_tu",
-            "T12",
-            "T5",
-            "T2",
-            "T10",
             "T1",
-            "T8"
+            "T2",
+            "T5",
+            "T8",
+            "T9",
+            "T10",
+            "T12"
         )
     ], measure.vars = c(
-        "T12",
-        "T5",
-        "T2",
-        "T10",
         "T1",
-        "T8"
+        "T2",
+        "T5",
+        "T8",
+        "T9",
+        "T10",
+        "T12"
     ),
     variable.name = "tpg")
 })
 
 # Add family label
-lapply(data_tpg_env, function(x) x[, tpg := paste0(tpg, "_fam")])
+lapply(data_tpg_env_fam, function(x) x[, tpg := paste0(sub("T", "TPG", tpg), "_fam")])
+saveRDS(data_tpg_env_fam, file.path(path_cache, "data_tpg_env_fam_fam.rds"))
+
+# Genus lvl data
+data_tpg_env_genus <- lapply(trait_groups_rel_genus, function(x) {
+    on <- if ("STAID" %in% names(x)) c("STAID" = "site") else "site"
+    x[env_param, `:=`(
+        SubstrateD84.M = i.SubstrateD84.M,
+        WetWidthIQR.STD = i.WetWidthIQR.STD,
+        DMax_42day.M = i.DMax_42day.M,
+        Riffle.FRC = i.Riffle.FRC,
+        Temp.median = i.Temp.median,
+        NH3_4wk.median = i.NH3_4wk.median,
+        orthoP_4wk.median = i.orthoP_4wk.median,
+        NO3NO2_4wk.median = i.NO3NO2_4wk.median
+    ), on = on]
+})
+
+# subset to most responsive TPGs
+# Genus-level: TPG4_genus, TPG10_genus, and TPG12_genus
+data_tpg_env_genus <- lapply(data_tpg_env_genus, function(x) {
+    melt(x[, .SD,
+        .SDcols = c(
+            "site",
+            "SubstrateD84.M",
+            "WetWidthIQR.STD",
+            "DMax_42day.M",
+            "Riffle.FRC",
+            "Temp.median",
+            "NH3_4wk.median",
+            "orthoP_4wk.median",
+            "NO3NO2_4wk.median",
+            "max_log_tu",
+            "T4",
+            "T10",
+            "T12"
+        )
+    ], measure.vars = c(
+        "T4",
+        "T10",
+        "T12"
+    ),
+    variable.name = "tpg")
+})
+
+# Add genus label
+lapply(data_tpg_env_genus, function(x) x[, tpg := paste0(sub("T", "TPG", tpg), "_genus")])
+saveRDS(data_tpg_env_genus, file.path(path_cache, "data_tpg_env_genus.rds"))
 
 ## Variable selection ----
 # Habitat vars
@@ -159,10 +213,23 @@ Hmisc::describe(env_param[, .(
 )])
 
 # Correlation with consistent CWM traits
+# small size, gills, gatherer, filterer, predator, bi/multivoltinism, semivoltinism, swimming, and  S_org
+
 pl_habitat <- list()
+titles_cwm_traits <- c(
+    "Size large",
+    "Size small",
+    "Gills",
+    "Feed Gatherer",
+    "Feed Filterer",
+    "Feed Predator",
+    "Bi/multivoltinism",
+    "Semivoltinism",
+    "Swimming",
+    "Sensitivity Organic"
+)
 for (region in names(data_cwm_env)) {
     x <- data_cwm_env[[region]]
-    titles <- c("Feed Predator", "Feed Gatherer", "Sensitivity Organic")
     pl_habitat[[region]] <- Map(
         function(i, title) {
             x[
@@ -175,27 +242,36 @@ for (region in names(data_cwm_env)) {
                 )
             ]
         },
-        c("feed_predator", "feed_gatherer", "sensitivity_organic"),
-        titles
+        c(
+            "size_large",
+            "size_small",
+            "resp_gil",
+            "feed_gatherer",
+            "feed_filter",
+            "feed_predator",
+            "volt_bi_multi",
+            "volt_semi",
+            "locom_swim",
+            "sensitivity_organic"
+        ),
+        titles_cwm_traits
     )
 }
 pl_habitat$Southeast
-# "Strongest" correlations CWM:
-# California: Riffle fraction highest corr.
-# Midwest: Wetwidth (pred & gatherer), Riffle fraction (sens. organic)
-# Northeast: SubstrateD84 (~ 0.1)
-# Northwest: Wetwidth (predator, ~0.1), SubstrateD84 (gatherer, > 0.3), 
-# RiffleFrc (sens. organic, > 0.3)
-# Southeast: SubstrateD84 (predator & sens. organic, ~0.1), 
-# RiffleFRC (gatherer, ~ 0.2)
 
 # "Strongest" correlations TPGs (graphically):
-#   T12, T5 in 4 regions
-#   T2, T10, T1, T8 in 3 regions
 pl_habitat_tpgs <- list()
-for (region in names(data_cwm_env)) {
-    x <- data_tpg_env[[region]]
-    titles <- c("T12", "T5", "T2", "T10", "T1", "T8")
+titles_tpgs <- c(
+        "TPG1_fam",
+        "TPG2_fam",
+        "TPG5_fam",
+        "TPG8_fam",
+        "TPG9_fam",
+        "TPG10_fam",
+        "TPG12_fam"
+)
+for (region in names(data_tpg_env_fam)) {
+    x <- data_tpg_env_fam[[region]]
     pl_habitat_tpgs[[region]] <- Map(
         function(i, title) {
             x[
@@ -208,8 +284,16 @@ for (region in names(data_cwm_env)) {
                 )
             ]
         },
-        c("T12", "T5", "T2", "T10", "T1", "T8"),
-        titles
+        c(
+            "TPG1_fam",
+            "TPG2_fam",
+            "TPG5_fam",
+            "TPG8_fam",
+            "TPG9_fam",
+            "TPG10_fam",
+            "TPG12_fam"
+        ),
+        titles_tpgs
     )
 }
 pl_habitat_tpgs$California
@@ -217,8 +301,8 @@ pl_habitat_tpgs$California
 # According to correlation
 # Riffle FRC seems to be most strongly correlated to TPGs
 cor_habitat_tpgs <- list()
-for (region in names(data_tpg_env)) {
-    cor_habitat_tpgs[[region]] <- data_tpg_env[[region]][, lapply(.SD, function(x) {
+for (region in names(data_tpg_env_fam)) {
+    cor_habitat_tpgs[[region]] <- data_tpg_env_fam[[region]][, lapply(.SD, function(x) {
         cor(x, value, use = "complete.obs")
     }),
     .SDcols = c(
@@ -239,7 +323,6 @@ rbindlist(cor_habitat_tpgs, idcol = "region") %>%
 pl_nutrients <- list()
 for (region in names(data_cwm_env)) {
     x <- data_cwm_env[[region]]
-    titles <- c("Feed Predator", "Feed Gatherer", "Sensitivity Organic")
     pl_nutrients[[region]] <- Map(
         function(i, title) {
             x[
@@ -252,26 +335,28 @@ for (region in names(data_cwm_env)) {
                 )
             ]
         },
-        c("feed_predator", "feed_gatherer", "sensitivity_organic"),
-        titles
+        c(
+            "size_large",
+            "size_small",
+            "resp_gil",
+            "feed_gatherer",
+            "feed_filter",
+            "feed_predator",
+            "volt_bi_multi",
+            "volt_semi",
+            "locom_swim",
+            "sensitivity_organic"
+        ),
+        titles_cwm_traits
     )
 }
 pl_nutrients$Southeast
-# "Strongest" correlations:
-# California: NO3NO2 (predator, sens.organic, 0.2 - 0.3),
-# orthoP (gatherer, ~0.25)
-# Midwest: NO3NO2 (predator, sens.organic, 0.1), 
-# orthoP (gatherer, 0.1)
-# Northeast: NO3NO2 (~0.2)
-# Northwest: NH3 (predator, 0.1 - 0.33)
-# Southeast: NO3NO2 (predator, ~0.2), 
-# orthoP (gatherer, sens.organic, 0.1 - 0.2) 
 
 # For TPGs
-# most strongly correlating: ortho P and NO3NO2
+# most strongly/oftencorrelating: ortho P and NO3NO2
 cor_nutrients_tpgs <- list()
-for (region in names(data_tpg_env)) {
-    cor_nutrients_tpgs[[region]] <- data_tpg_env[[region]][, lapply(.SD, function(x) {
+for (region in names(data_tpg_env_fam)) {
+    cor_nutrients_tpgs[[region]] <- data_tpg_env_fam[[region]][, lapply(.SD, function(x) {
         cor(x, value, use = "complete.obs")
     }),
     .SDcols = c(
@@ -288,133 +373,52 @@ rbindlist(cor_nutrients_tpgs, idcol = "region") %>%
     .[order(region), ] %>% 
     .[, .N, by = "variable"]
 
+# Correlations & Range between NH3 and P
+# Take Phosphate, seems to correlate quite often with TPGs 
+lapply(data_tpg_env_fam, function(x) x[, cor(NH3_4wk.median, orthoP_4wk.median)])
+lapply(data_tpg_env_fam, function(x) {
+    x[, .(
+        r_NH3 = range(NH3_4wk.median),
+        r_P = range(orthoP_4wk.median)
+    )]
+})
 
-# Testing Interactions ----
-interactions <- list(
-    "max_log_tu * Riffle.FRC",
-    "max_log_tu * Temp.median",
-    "max_log_tu * NO3NO2_4wk.median",
-    "max_log_tu * Riffle.FRC * Temp.median",
-    "max_log_tu * Riffle.FRC * NO3NO2_4wk.median",
-    "max_log_tu * Temp.median * NO3NO2_4wk.median"
-)
-trait <- list(
-    "feed_gatherer",
-    "feed_predator",
-    "sensitivity_organic"
-)
-collect_form <- expand.grid(trait, "~", interactions)
-titles_traits <- collect_form$Var1
-collect_form <- as.data.table(collect_form) %>%
-    .[, paste(Var1, Var2, Var3)] %>%
-    as.list(.)
+# EPT ----
+ept  <- readRDS(file.path(path_cache, "ept.rds"))
+ept[Region != "Midwest", STAID := site]
 
-# Calc. interactions CWM
-cwm_interactions <- lapply(data_cwm_env, function(dt) {
-    dcast(dt,
-        max_log_tu + Riffle.FRC + Temp.median + NO3NO2_4wk.median + site ~ trait,
-        value.var = "cwm_val"
-    ) %>%
-        fun_interactions(
-            x = .,
-            formulas = collect_form,
-            naming_category = "cwm_trait_interactions"
-        )
-}) %>%
-    rbindlist(., idcol = "region") %>%
-    setnames(., "Pr(>|t|)", "p_value")
-# saveRDS(cwm_interactions, file.path(path_cache, "cwm_interactions.rds"))
+# Site assigned to STAID which was previously just used for Midwest
+# to enable merge with env_param
+ept[env_param, `:=`(
+    Riffle.FRC = i.Riffle.FRC,
+    Temp.median = i.Temp.median,
+    orthoP_4wk.median = i.orthoP_4wk.median
+),
+on = c("STAID" = "site")
+]
+saveRDS(ept, file.path(path_cache, "ept_env.rds"))
 
-# Search for significant interactions with maxTU
-cwm_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
-    .[id %like% ":", ] %>%
-    .[id %like% "max\\_log\\_tu", ]
+# SPEAR ----
+result_spear <- readRDS(file.path(path_cache, "spear_preprocessed.rds"))
+result_spear$SPEAR_Midwest[data_cwm$Midwest, STAID := i.STAID, on = "site"]
 
-# Overview cwm traits interactions : 
-# California: gatherer ~ toxicity * riffle
-# Midwest: predator ~ toxicity * temp
-# Northeast:
-#   sens. organic ~ toxicity * riffle
-#   sens. organic ~ toxicity * nutrients
-#   sens. organic ~ toxicity * temp.
-# Northwest:
-#   predator ~ toxicity * riffle
-#   gatherer ~ toxicity * nutrients
-#   gatherer ~ toxicity * nutrients * temp
-# Southeast: predator ~ toxicity * riffle
+# Merge with env data
+result_spear  <- lapply(result_spear, function(x) {
+    on <- if ("STAID" %in% names(x)) c("STAID" = "site") else "site"
+    x[env_param, `:=`(
+        Riffle.FRC = i.Riffle.FRC,
+        Temp.median = i.Temp.median,
+        orthoP_4wk.median = i.orthoP_4wk.median
+    ),
+    on = on
+    ]
+})
 
-# Calc. interactions TPGs:
-tpg <- list(
-    "T12_fam",
-    "T5_fam",
-    "T2_fam",
-    "T10_fam",
-    "T1_fam",
-    "T8_fam"
-)
-collect_form_tpg <- expand.grid(tpg, "~", interactions)
-titles_tpg <- collect_form_tpg$Var1
-collect_form_tpg <- as.data.table(collect_form_tpg) %>%
-    .[, paste(Var1, Var2, Var3)] %>%
-    as.list(.)
-
-tpg_interactions <- lapply(data_tpg_env, function(dt) {
-    dcast(dt,
-        max_log_tu + Riffle.FRC + Temp.median + NO3NO2_4wk.median + site ~ tpg,
-        value.var = "value"
-    ) %>%
-        fun_interactions(
-            x = .,
-            formulas = collect_form_tpg,
-            naming_category = "tpg_interactions"
-        )
-}) %>%
-    rbindlist(., idcol = "region") %>% 
-    setnames("Pr(>|t|)", "p_value")
-# saveRDS(tpg_interactions, file.path(path_cache, "tpg_interactions.rds"))
-
-# Search for significant interactions with maxTU
-# Note for paper: T10 and T1 seem to correlate frequently with other variables
-tpg_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
-    .[id %like% ":", ] %>%
-    .[id %like% "max\\_log\\_tu", ] %>% 
-    .[tpg_interactions %like% c("T12|T5"), ]
-
-# Create Table for publication (or SI)
-cwm_interactions <- readRDS(file.path(path_cache, "cwm_interactions.rds"))
-tpg_interactions <- readRDS(file.path(path_cache, "tpg_interactions.rds"))
-rbind(
-    cwm_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
-        .[id %like% ":", ] %>%
-        .[id %like% "max\\_log\\_tu", ],
-    tpg_interactions[p_value <= 0.05 & id != "(Intercept)", ] %>%
-        .[id %like% ":", ] %>%
-        .[id %like% "max\\_log\\_tu", ] %>%
-        .[tpg_interactions %like% c("T12|T5"), ],
-    fill = TRUE
-) %>%
-    .[, Formula := coalesce(cwm_trait_interactions, tpg_interactions)] %>%
-    .[id %like% "Riffle.*", id := sub("FRC", "frc", id)]  %>%
-    .[Formula %like% "Riffle.*", Formula := sub("FRC", "frc", Formula)]  %>% 
-    .[Formula %like% "NO3NO2", Formula := sub("\\_4wk", "", Formula)] %>% 
-    .[region == "PN", region := "Northwest"] %>% 
-    .[, .(region,
-        Formula,
-        id,
-        Estimate = round(Estimate, digits = 3),
-        p_value = round(p_value, digits = 4)
-    )] %>%
-    setnames(
-        .,
-        c(
-            "region",
-            "id",
-            "p_value"
-        ),
-        c(
-            "Region",
-            "Significant interaction",
-            "P value"
-        )
-    ) %>% 
-    fwrite(., file = file.path(path_paper, "Tables", "significant_interactions.csv"))
+# Merge Toxicity
+max_tu <- readRDS(file.path(path_cache, "max_tu.rds"))
+setnames(max_tu, "TSITE_NO_WQ", "site")
+lapply(result_spear, function(x) {
+    on <- if ("STAID" %in% names(x)) c("STAID" = "site") else "site"
+    x[max_tu, max_log_tu := i.max_log_tu, on = on]
+})
+saveRDS(result_spear, file.path(path_cache, "spear_env.rds"))

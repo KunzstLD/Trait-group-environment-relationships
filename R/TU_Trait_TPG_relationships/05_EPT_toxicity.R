@@ -66,6 +66,9 @@ abund_subs <- abund_subs[!is.na(max_log_tu), ]
 # Few STAIDs are duplicates (same chemical info, but different ecology)
 # abund_subs[!is.na(STAID) & duplicated(STAID),]
 
+# Final EPT data
+# saveRDS(abund_subs, file.path(path_cache, "ept.rds"))
+
 # GAMs & LMs ----
 # - Significant coeff. in California and Northwest
 # - Negative relationship in California, Midwest, 

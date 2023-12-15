@@ -101,6 +101,7 @@ lapply(result_spear, function(x) {
     )
 })
 lapply(result_spear, function(x) x[, Name_1 := NULL])
+# saveRDS(result_spear, file.path(path_cache, "spear_preprocessed.rds"))
 
 # EQ Distribution (5 classes based on WRRL)
 lapply(result_spear, function(x)
@@ -168,7 +169,6 @@ for(i in names(sim_res_ept)){
     plot(sim_res_ept[[i]], main = i)
 }
 
-
 # Plotting ----
 ggplot(result_spear, aes(x = SPEAR_Pestizide, y = max_log_tu)) +
     facet_wrap(as.factor(Region) ~.) +
@@ -213,3 +213,71 @@ ggsave(file.path(path_paper, "Graphs", "SPEAR_toxicity.png"),
     height = 40,
     units = "cm"
 )
+
+# Summary Table SPEAR ----
+spear_table <- rbind(
+    lapply(
+        lm_spear[c("California", "Midwest", "Northwest", "Southeast")],
+        function(x) {
+            broom::tidy(x)
+        }
+    ) %>%
+        rbindlist(., idcol = "Region") %>%
+        setnames(., "statistic", "t"),
+    rbind(
+        lapply(
+            gam_spear["Northeast"],
+            function(x) {
+                broom::tidy(x, parametric = TRUE)
+            }
+        ) %>%
+            rbindlist(., idcol = "Region") %>%
+            setnames(., "statistic", "t"),
+        lapply(
+            gam_spear["Northeast"],
+            function(x) {
+                broom::tidy(x, parametric = FALSE)
+            }
+        ) %>%
+            rbindlist(., idcol = "Region") %>%
+            setnames(
+                .,
+                c("statistic", "p.value"),
+                c("F", "p.value_gam")
+            ),
+        fill = TRUE
+    ),
+    fill = TRUE
+)
+# spear_table[p.value <= 0.05, ]
+spear_gof <- lapply(lm_spear, broom::glance) %>%
+    rbindlist(., idcol = "Region")
+spear_gof[, r.squared := round(r.squared*100, 2)]
+
+spear_table[, `:=`(
+    estimate = round(estimate, digits = 2),
+    std.error = round(std.error, digits = 2),
+    t = round(t, digits = 2),
+    F = round(F, digits = 2),
+    p.value = fifelse(
+        round(p.value, digits = 3) == 0,
+        "<0.01",
+        paste(round(p.value, digits = 3))
+    ),
+    p.value_gam = fifelse(
+        round(p.value_gam, digits = 3) == 0,
+        "<0.01",
+        paste(round(p.value_gam, digits = 3))
+    ), 
+    edf = round(edf, digits = 2),
+    ref.df = round(ref.df, digits = 2)
+)]
+spear_table[spear_gof[Region != "Northeast", ],
+    r.squared := i.r.squared,
+    on = "Region"
+]
+setcolorder(
+    spear_table,
+    c("Region", "term", "estimate", "std.error", "t", "p.value", "r.squared")
+)
+fwrite(spear_table, file.path(path_paper, "Tables", "SPEAR_log_tu_results.csv"))
