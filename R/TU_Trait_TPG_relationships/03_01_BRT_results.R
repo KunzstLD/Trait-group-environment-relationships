@@ -5,20 +5,19 @@ res_xgboost_comb <- load_data(
   pattern = "res\\_xgboost.*",
   name_rm_pattern = "res\\_xgboost\\_"
 )
-# names(res_xgboost_comb)
 
-# Get prediction on test and training data
-xgboost_perform <- purrr::map(res_xgboost_comb, ~ sapply(.x, function(x) {
-  c(
-    "train" = x$pred_train,
-    "test" = x$pred_test
-  )
-}))
-xgboost_perform <- lapply(xgboost_perform, function(x) as.data.table(x, keep.rownames = TRUE)) %>%
-    rbindlist(., id = "method") %>%
-    melt(., id.vars = c("rn", "method")) %>%
-    dcast(., ... ~ rn, value.var = "value")
-setnames(xgboost_perform, "variable", "region")
+# # Get prediction on test and training data
+# xgboost_perform <- purrr::map(res_xgboost_comb, ~ sapply(.x, function(x) {
+#   c(
+#     "train" = x$pred_train,
+#     "test" = x$pred_test
+#   )
+# }))
+# xgboost_perform <- lapply(xgboost_perform, function(x) as.data.table(x, keep.rownames = TRUE)) %>%
+#     rbindlist(., id = "method") %>%
+#     melt(., id.vars = c("rn", "method")) %>%
+#     dcast(., ... ~ rn, value.var = "value")
+# setnames(xgboost_perform, "variable", "region")
 # saveRDS(xgboost_perform, file.path(path_cache, "xgboost_perform.rds"))
 
 # Test and training RMSE
@@ -108,7 +107,6 @@ lookup_traits <- data.table(
   )
 )
 
-# Top 5 per region
 # Add grouping features for cwm and cws
 xgboost_imp[
   method %in% c("cwm", "cws"),
@@ -117,6 +115,177 @@ xgboost_imp[
 xgboost_imp[lookup_traits,
   trait_label := i.trait_label, on = c("trait_TPG" = "trait")
 ]
+
+#### Correlation CWM and TPG importance ranks ####
+
+# Give correct names for TPGs
+xgboost_imp[method == "tpgs_rel_family", trait_TPG := paste0("TPG", sub("T", "", trait_TPG), "_fam")]
+xgboost_imp[method == "tpgs_rel_genus", trait_TPG := paste0("TPG", sub("T", "", trait_TPG), "_genus")]
+
+# Split into three datasets
+xgboost_cwm <- xgboost_imp[method=="cwm", ]
+xgboost_tpg_fam <- xgboost_imp[method=="tpgs_rel_family", ]
+xgboost_tpg_gen <- xgboost_imp[method=="tpgs_rel_genus", ]
+
+# Convert to factor
+xgboost_cwm[, trait_TPG := factor(trait_TPG)]
+levels(xgboost_cwm$trait_TPG)
+
+##### CWM ----
+
+# Add a zero imp. score for each trait that did not occur in the ranking
+regions <- unique(xgboost_imp$region)
+traits_expanded <- list()
+
+for (i in regions) {
+    data <- xgboost_cwm[region == i, ]
+
+    traits_ <- as.character(data[, trait_TPG])
+    traits_unranked_ <- lookup_traits[!traits %in% traits_, trait]
+
+    traits_expanded[[i]] <- data.frame(
+      "traits" = c(traits_, traits_unranked_),
+      "score" = c(data$score, rep(0, length(traits_unranked_)))
+    )
+}
+traits_expanded <- rbindlist(traits_expanded, idcol="region")
+
+# Calc the correlation
+# Region grid for comparison
+comparison_grid  <- as.data.frame(t(combn(unique(xgboost_imp$region), 2)))
+setDT(comparison_grid)
+
+corr_result <- list()
+for (j in 1:nrow(comparison_grid)) {
+  region1 <- comparison_grid[j, V1]
+  region2 <- comparison_grid[j, V2]
+  
+  df_1 <- traits_expanded[region == region1, ]
+  df_2 <- traits_expanded[region == region2, ]
+  
+  # Match according to traits, then compare by score
+  test_stat <- cor.test(df_1[, score], 
+                        df_2[order(match(traits, df_1$traits)), score], 
+                          method ="spearman",
+                          exact = FALSE, 
+                          alternative = "two.sided"
+                        )
+  
+  corr_result[[j]] <- data.frame("rho" = test_stat$estimate,
+                                 "p_val" = test_stat$p.value)
+}
+corr_result <- rbindlist(corr_result)
+comparison_grid[, `:=`(cwm_corr = corr_result$rho, 
+                       p_val = corr_result$p_val)]
+
+
+##### TPGs ----
+tpgs_fam <- unique(xgboost_tpg_fam$trait_TPG)
+tpgs_gen <- unique(xgboost_tpg_gen$trait_TPG)
+
+tpgs_fam_expanded <- list()
+tpgs_gen_expanded <- list()
+
+# Expand with zero score
+for (i in regions) {
+  data_fam_ <- xgboost_tpg_fam[region == i, ]
+  data_gen_ <- xgboost_tpg_gen[region == i, ]
+  
+  tpgs_fam_expanded_ <- as.character(data_fam_[, trait_TPG])
+  tpgs_gen_expanded_ <- as.character(data_gen_[, trait_TPG])
+  
+  tpgs_fam_unranked_ <- tpgs_fam[!tpgs_fam %in% tpgs_fam_expanded_]
+  tpgs_gen_unranked_ <- tpgs_gen[!tpgs_gen %in% tpgs_gen_expanded_]
+  
+  tpgs_fam_expanded[[i]] <- data.frame(
+    "tpgs_fam" = c(tpgs_fam_expanded_, tpgs_fam_unranked_),
+    "score" = c(data_fam_$score, rep(0, length(
+      tpgs_fam_unranked_
+    )))
+  )
+  
+  tpgs_gen_expanded[[i]] <- data.frame(
+    "tpgs_gen" = c(tpgs_gen_expanded_, tpgs_gen_unranked_),
+    "score" = c(data_gen_$score, rep(0, length(
+      tpgs_gen_unranked_
+    )))
+  )
+}
+
+# Calc the correlation
+tpgs_fam_expanded <- rbindlist(tpgs_fam_expanded, idcol="region")
+tpgs_gen_expanded <- rbindlist(tpgs_gen_expanded, idcol="region")
+
+corr_result_tpgs_fam <- list()
+corr_result_tpgs_gen <- list()
+
+for (j in 1:nrow(comparison_grid)) {
+  region1_ <- comparison_grid[j, V1]
+  region2_ <- comparison_grid[j, V2]
+  
+  df_fam_1 <- tpgs_fam_expanded[region==region1_,]
+  df_fam_2 <- tpgs_fam_expanded[region==region2_,]
+  
+  df_gen_1 <- tpgs_gen_expanded[region==region1_,]
+  df_gen_2 <- tpgs_gen_expanded[region==region2_,]
+  
+  test_stat_fam <- cor.test(
+    df_fam_1[, score],
+    df_fam_2[order(match(tpgs_fam, df_fam_1$tpgs_fam)), score],
+     method="spearman",
+     exact=FALSE,
+     alternative = "two.sided"
+  )
+  
+  corr_result_tpgs_fam[[j]] <- data.frame("rho" = test_stat_fam$estimate,
+                                          "p_val" = test_stat_fam$p.value)
+  
+  test_stat_gen <- cor.test(
+    df_gen_1[, score],
+    df_gen_2[order(match(tpgs_gen, df_gen_1$tpgs_gen)), score],
+      method="spearman",
+      exact=FALSE,
+      alternative = "two.sided"
+  )
+  
+  corr_result_tpgs_gen[[j]] <- data.frame("rho" = test_stat_gen$estimate,
+                                          "p_val" = test_stat_gen$p.value)
+}
+corr_result_tpgs_fam <- rbindlist(corr_result_tpgs_fam)
+corr_result_tpgs_gen <- rbindlist(corr_result_tpgs_gen)
+
+comparison_grid[, `:=`(
+  tpgs_fam_corr = corr_result_tpgs_fam$rho,
+  tpgs_fam_p_val = corr_result_tpgs_fam$p_val,
+  tpgs_gen_corr = corr_result_tpgs_gen$rho,
+  tpgs_gen_p_val = corr_result_tpgs_gen$p_val
+)]
+
+# Save table
+comparison_grid[, "Compared region" := paste(V1, "-", V2)]
+setnames(comparison_grid, 
+         old = c("cwm_corr", 
+                 "p_val",
+                 "tpgs_fam_corr",
+                 "tpgs_fam_p_val",
+                 "tpgs_gen_corr", 
+                 "tpgs_gen_p_val"),
+         new = c("Corr. CWM traits", 
+                 "P val Corr CWM traits", 
+                 "TPGs correlation (family level)", 
+                 "TPGs P val (family level)", 
+                 "TPGs correlation (genus level)", 
+                 "TPGs P val (genus level)"))
+comparison_grid[, `Compared region` := sub("PN", "Southwest", `Compared region`)]
+
+num_cols <- names(Filter(is.numeric, comparison_grid))
+comparison_grid[, (num_cols) := lapply(.SD, function(x)
+  round(x, 2)), .SDcols = num_cols]
+
+fwrite(comparison_grid[, .SD, .SDcols = c("Compared region", num_cols)], 
+       file.path(path_paper, "Tables", "Correlations_rankings.csv"))
+
+#### Top 5 important/responsive traits/TPGs per region ####
 
 # CWM:
 # size large 3 times,
@@ -201,6 +370,22 @@ xgboost_imp[method == "tpgs_rel_genus", ] %>%
 # Load defining trait combinations
 # defining_traits_family <- readRDS(file.path(path_cache, "defining_traits_family.rds"))
 # defining_traits_genus <- readRDS(file.path(path_cache, "defining_traits_genus.rds"))
+
+# Summary table for all methods 
+xgboost_imp[method %in% c("cwm", "tpgs_rel_family", "tpgs_rel_genus")] %>% 
+  .[, score := round(score, digits = 2)] %>% 
+  .[order(-score), .SD[1:5, ], by = c("method", "region")]  %>% 
+  dcast(., method+trait_TPG~region, value.var = "score") %>% 
+  .[method == "tpgs_rel_family", trait_TPG := paste0("TPG", sub("T", "", trait_TPG), "_fam")]  %>% 
+  .[method == "tpgs_rel_genus", trait_TPG := paste0("TPG", sub("T", "", trait_TPG), "_genus")] %>% 
+  setnames(
+    .,
+    c("trait_TPG", "method", "PN"),
+    c("TPG", "Method", "Northwest")
+  ) %>%
+  print()
+  fwrite(., file.path(path_paper, "Tables", "Most_imp_TPGs_summary.csv"))
+
 
 # Taxonomic composition of TPGs ----
 ## Family level ----

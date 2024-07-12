@@ -93,6 +93,7 @@ tpg_comb_family <- rbindlist(trait_groups_rel_final$family_lvl, idcol = "region"
         TPG9_fam,
         TPG10_fam,
         TPG12_fam,
+        TPG15_fam, # Added afterwards, not consistently most important, but fifth most important in Midwest
         max_log_tu
     )] %>%
     melt(.,
@@ -419,6 +420,8 @@ cwm_table[term == "s(cwm_val)", term := "s(cwm_val_size_large)"]
 # saveRDS(cwm_table, file.path(path_cache, "cwm_tabl_publ.rds"))
 
 ## TPG table ----
+# summary(lm_tpg_fam$Midwest_TPG15_fam)
+
 tpg_table_fam <- rbind(
     lapply(
         lm_tpg_fam[
@@ -519,7 +522,6 @@ tpg_table_fam[, `:=`(
     )
 )]
 # saveRDS(tpg_table_fam, file.path(path_cache, "tpg_tabl_publ.rds"))
-
 tpg_table_genus <- rbind(
     lapply(
         lm_tpg_gen[
