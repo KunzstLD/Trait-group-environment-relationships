@@ -12,6 +12,7 @@ unique(abund[, .(taxon, taxonomic_level)]) %>%
 .[, .N, by = "taxonomic_level"]
 trait_genera$order %>% unique
 
+
 # Merge TPGs
 # family level
 abund[trait_family, group_family := i.group, on = "family"]

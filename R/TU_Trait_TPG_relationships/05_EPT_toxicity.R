@@ -95,8 +95,17 @@ for (i in unique(abund_subs$Region)) {
 }
 
 ## Diagnostics ----
+
+# EDF
+edf_ept <- list()
+for(i in names(gam_ept)){
+  edf_ <- broom::tidy(gam_ept[[i]], parametric=FALSE)
+  edf_ept[[i]] <- data.table(edf = edf_$edf, gam_or_lm = ifelse(edf_$edf > 1.01, "gam", "lm"))
+}
+edf_ept <- rbindlist(edf_ept, idcol = "Region")
+
 # GAM
-# All linear except Midwest
+# All linear except Midwest & California
 par(mfrow = c(2,3))
 for(i in names(gam_ept)){
     plot(gam_ept[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
@@ -114,7 +123,7 @@ ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
     facet_wrap(as.factor(Region) ~.) +
     geom_point(alpha = 0.5, shape = 1, size = 2) +
     geom_smooth(
-        data = ~ .x[Region != "Midwest", ],
+        data = ~ .x[!Region %in% c("California", "Midwest"), ],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
@@ -125,7 +134,7 @@ ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
         y = "Max logTU"
     ) + 
     geom_smooth(
-        data = ~ .x[Region == "Midwest", ],
+        data = ~ .x[Region %in% c("California", "Midwest"), ],
         method = "gam",
         formula = y ~ s(x),
         se = TRUE,
@@ -134,30 +143,30 @@ ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
     theme_bw() +
     theme(
         legend.position = "none",
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 16, face = "bold"),
         axis.text.x = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         ),
         axis.text.y = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         ),
         strip.text = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         )
     )
 ggsave(file.path(path_paper, "Graphs", "EPT_toxicity.png"),
     width = 35,
-    height = 40,
+    height = 20,
     units = "cm"
 )
 
 # Summary Table EPT ----
 ept_table <- rbind(
     lapply(
-        lm_ept[c("California", "Northeast", "Northwest", "Southeast")],
+        lm_ept[c("Northeast", "Northwest", "Southeast")],
         function(x) {
             broom::tidy(x)
         }
@@ -166,7 +175,7 @@ ept_table <- rbind(
         setnames(., "statistic", "t"),
     rbind(
         lapply(
-            gam_ept["Midwest"],
+            gam_ept[c("California","Midwest")],
             function(x) {
                 broom::tidy(x, parametric = TRUE)
             }
@@ -174,7 +183,7 @@ ept_table <- rbind(
             rbindlist(., idcol = "Region") %>%
             setnames(., "statistic", "t"),
         lapply(
-            gam_ept["Midwest"],
+            gam_ept[c("California","Midwest")],
             function(x) {
                 broom::tidy(x, parametric = FALSE)
             }
@@ -191,8 +200,6 @@ ept_table <- rbind(
 )
 ept_gof <- lapply(lm_ept, broom::glance) %>%
     rbindlist(., idcol = "Region")
-ept_gof[, r.squared := round(r.squared*100, 2)]
-
 ept_table[, `:=`(
     estimate = round(estimate, digits = 2),
     std.error = round(std.error, digits = 2),
@@ -211,12 +218,24 @@ ept_table[, `:=`(
     edf = round(edf, digits = 2),
     ref.df = round(ref.df, digits = 2)
 )]
-ept_table[ept_gof[Region != "Midwest", ],
+
+# Add R2 or deviance
+ept_table[ept_gof[!Region %in% c("California", "Midwest"), ],
     r.squared := i.r.squared,
     on = "Region"
 ]
+ept_dev <- lapply(gam_ept[c("California", "Midwest")], function(x) {
+  data.table("dev_explained" = summary(x)$dev.expl)
+}) |>
+  rbindlist(, idcol = "Region") |> 
+  _[, dev_explained := round(dev_explained, digits=3)]
+
+ept_table[ept_dev, dev_explained := i.dev_explained, on="Region"]
+ept_table[,r_squared_dev_expl := coalesce(r.squared, dev_explained)]
+ept_table[, r_squared_dev_expl := round(r_squared_dev_expl, digits = 3)]
+ept_table[,p_p_gam := coalesce(p.value, p.value_gam)]
 setcolorder(
     ept_table,
-    c("Region", "term", "estimate", "std.error", "t", "p.value", "r.squared")
+    c("Region", "term", "estimate", "std.error", "t", "p_p_gam", "r_squared_dev_expl")
 )
 fwrite(ept_table, file.path(path_paper, "Tables", "EPT_log_tu_results.csv"))

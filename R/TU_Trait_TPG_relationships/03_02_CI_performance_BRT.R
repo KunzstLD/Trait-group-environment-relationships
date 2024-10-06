@@ -96,6 +96,7 @@ tpg_genus_ci_rmse <- Map(
 )
 saveRDS(tpg_genus_ci_rmse, file.path(path_cache, "tpg_genus_ci_rmse.rds"))
 
+
 # Plotting ----
 # Prediction errors
 pred_error_cwm <- lapply(res_xgboost_cwm, `[`, c("pred_train", "pred_test")) %>%
@@ -173,29 +174,25 @@ ggplot(pred_error) +
       ymax = CI_rmse_train_97.5^2
     ),
     position = position_nudge(x = 0.2),
-    alpha = 0.3
+    alpha = 0.35
   ) +
   facet_wrap(. ~ region) +
   labs(x = "", y = "MSE") +
   scale_x_discrete(labels = c("CWM", "TPG \n (family)", "TPG \n (genus)")) +
   theme_bw() +
   theme(
-    axis.title = element_text(size = 16),
+    axis.title = element_text(size = 16, face="bold"),
     axis.text.x = element_text(
       family = "Roboto Mono",
-      size = 14
+      size = 16
     ),
     axis.text.y = element_text(
       family = "Roboto Mono",
-      size = 14
+      size = 16
     ),
     strip.text = element_text(
       family = "Roboto Mono",
-      size = 14
-    ),
-    legend.text = element_text(
-      family = "Roboto Mono",
-      size = 14
+      size = 16
     )
   )
 ggsave(

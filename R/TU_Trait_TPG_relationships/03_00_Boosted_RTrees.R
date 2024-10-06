@@ -154,7 +154,7 @@ for (region in names(data_cws)) {
 res_xgboost_tpgs_rel_family <- list()
 for (region in names(trait_groups_rel_family)) {
   var_names <- names(trait_groups_rel_family[[region]])[names(trait_groups_rel_family[[region]]) %like% "^T[0-9]"]
-  res_xgboost_tpgs_rel_family[[region]] <- perform_xgboost(
+res_xgboost_tpgs_rel_family[[region]] <- perform_xgboost(
     x = trait_groups_rel_family[[region]],
     features = var_names,
     id = region

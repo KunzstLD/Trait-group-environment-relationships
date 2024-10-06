@@ -7,26 +7,31 @@
 # - Add other most consistent TPG_fam
 # - Table with Coefficients for SI/What to report for GAMs (Brown Paper)?
 # - Graph for EPT & SPEAR as well 
+# - Calculate for all TPGs?
 # ________________________________________________
 data_cwm_final <- readRDS(file.path(path_cache, "data_cwm_final.rds"))
 most_imp_cwm <- readRDS(file.path(path_cache, "most_important_traits_cwm.rds"))
 most_imp_cwm[, .N, by = "trait_TPG"] %>% 
 .[order(-N)]
 
-# CWM
+# CWM ----
 # size large: California, Midwest, Northwest
-# traits that were most important in two regions might be added later
+# Other traits: most important traits per region
 cwm_combined <- rbindlist(data_cwm_final, idcol = "region", fill = TRUE) %>%
-    .[trait == "size_large", ] %>%
+    .[trait %in% c("size_large", "feed_predator", "sensitivity_organic", "size_small", "feed_parasite"), ] %>%
     .[, region := fifelse(region == "PN", "Northwest", region)]
 
 # bivar. relationship
+# TODO: Plots need be saved correctly
 biv_plot <- list()
 for(i in unique(cwm_combined$region)){
-    biv_plot[[i]] <- ggpairs(cwm_combined[region == i, .(max_log_tu, cwm_val)],
-    title = i)
+  for(j in unique(cwm_combined$trait)){
+    biv_plot[[paste(i, "_", j)]] <- ggpairs(cwm_combined[region == i & trait==j, .(max_log_tu, cwm_val)],
+                                            title = paste(i, "_", j)) 
+  }
 }
 biv_plot
+
 
 # Most consistent responding traits
 # Decide on a model
@@ -35,28 +40,36 @@ sim_res_lm <- list()
 gam_cwm <- list()
 gam_assump <- list()
 for (i in unique(cwm_combined$region)) {
-    lm_cwm[[i]] <- lm(max_log_tu ~ cwm_val,
-        data = cwm_combined[region == i, ]
+  for(j in unique(cwm_combined$trait)){
+    lm_cwm[[paste0(i, "_", j)]] <- lm(max_log_tu ~ cwm_val,
+                                      data = cwm_combined[region == i & trait==j, ]
     )
-
-    sim_res_lm[[i]] <- simulateResiduals(fittedModel = lm_cwm[[i]])
-
-    gam_cwm[[i]] <- gam(
-        max_log_tu ~ s(cwm_val),
-        data = cwm_combined[region == i, ],
-        method = "REML"
+    
+    sim_res_lm[[paste0(i, "_", j)]] <- simulateResiduals(fittedModel = lm_cwm[[paste0(i, "_", j)]])
+    
+    gam_cwm[[paste0(i, "_", j)]] <- gam(
+      max_log_tu ~ s(cwm_val),
+      data = cwm_combined[region == i & trait==j, ],
+      method = "REML"
     )
-
-    gam_assump[[i]] <- gam.check(gam_cwm[[i]])
+    
+    gam_assump[[paste0(i, "_", j)]] <- gam.check(gam_cwm[[paste0(i, "_", j)]]) 
+  }
 }
 
-# Diagnostics
-# GAM
-# Suggests linear model for California, Midwest, and maybe for Southeast
-# GAMs for the rest
+# Diagnostics GAMs, visual inspection
+par(mfrow = c(5,5))
 for(i in names(gam_cwm)){
     plot(gam_cwm[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
 }
+
+# EDF for final decision between LM or GAM 
+edf_cwm <- list()
+for(i in names(gam_cwm)){
+  edf_ <- broom::tidy(gam_cwm[[i]], parametric=FALSE)
+  edf_cwm[[i]] <- data.table(edf = edf_$edf, gam_or_lm = ifelse(edf_$edf > 1.01, "gam", "lm"))
+}
+edf_cwm <- rbindlist(edf_cwm, idcol = "region_cwm")
 
 # LM
 # Midwest Model ok
@@ -64,6 +77,7 @@ for(i in names(gam_cwm)){
 for(i in names(sim_res_lm)){
     plot(sim_res_lm[[i]], main = i)
 }
+
 
 # TPGs ----
 ## Family level ----
@@ -138,6 +152,14 @@ for (i in unique(tpg_comb_family$region)) {
     }
 }
 
+# EDF for decision between LM or GAM 
+edf_tpg_fam <- list()
+for(i in names(gam_tpg_fam)){
+  edf_ <- broom::tidy(gam_tpg_fam[[i]], parametric=FALSE)
+  edf_tpg_fam[[i]] <- data.table(edf = edf_$edf, gam_or_lm = ifelse(edf_$edf > 1.01, "gam", "lm"))
+}
+edf_tpg_fam <- rbindlist(edf_tpg_fam, idcol = "region_tpg_fam")
+
 # Plots
 # - California all LM except for TPG10_fam 
 # - Midwest All LM except for TPG5_fam & TPG12_fam
@@ -145,7 +167,7 @@ for (i in unique(tpg_comb_family$region)) {
 # - Northwest all GAM except TPG10_fam & TPG12_fam
 # - Southeast all LM except TPG1_fam
 # linear model California and Midwest, maybe Southeast as well
-par(mfrow = c(5,7))
+par(mfrow = c(6,7))
 for(i in names(gam_tpg_fam)){
     plot(gam_tpg_fam[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
 }
@@ -169,8 +191,10 @@ trait_groups_rel_final$genus_lvl <- lapply(
         )
     }
 )
+
+# Added T9_genus and T15_genus, as they were the most important TPGs in some regions
 tpg_comb_genus <- rbindlist(trait_groups_rel_final$genus_lvl, idcol = "region", fill = TRUE) %>%
-    .[, .(region, T4_genus, T10_genus, T12_genus, max_log_tu)] %>%
+    .[, .(region, T4_genus, T10_genus, T9_genus, T12_genus, T15_genus, max_log_tu)] %>%
     melt(.,
         id.vars = c("max_log_tu", "region"),
         variable.name = "tpg",
@@ -216,24 +240,33 @@ for (i in unique(tpg_comb_genus$region)) {
         )
     }
 }
+names(lm_tpg_gen)
+names(gam_tpg_gen)
+
+# EDF
+edf_tpg_genus <- list()
+for(i in names(gam_tpg_gen)){
+  edf_ <- broom::tidy(gam_tpg_gen[[i]], parametric=FALSE)
+  edf_tpg_genus[[i]] <- data.table(edf = edf_$edf, gam_or_lm = ifelse(edf_$edf > 1.01, "gam", "lm"))
+}
+edf_tpg_genus <- rbindlist(edf_tpg_genus, idcol = "region_tpg_gen")
 
 # Diagnostics
 # GAM
-# Suggests linear model California and Midwest, maybe Southeast as well
 par(mfrow = c(5,3))
 for(i in names(gam_tpg_gen)){
     plot(gam_tpg_gen[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
 }
 
 # LM
-# Midwest Model ok
-# California shows some deviations
 for(i in names(sim_res_lm_tpg_gen)){
     plot(sim_res_lm_tpg_gen[[i]], main = i)
 }
 
 
 # Summary plots ----
+
+# Load the data
 # cwm_combined <- cwm_combined[, .(region, trait, cwm_val, max_log_tu)]
 # saveRDS(cwm_combined, file.path(path_cache, "cwm_combined.rds"))
 cwm_combined <- readRDS(file.path(path_cache, "cwm_combined.rds"))
@@ -242,7 +275,7 @@ cwm_combined <- readRDS(file.path(path_cache, "cwm_combined.rds"))
 # tpg_comb <- rbindlist(
 #     list(
 #         "tpg_fam" = tpg_comb_family,
-#         "tpg_gen" = tpg_comb_genus
+#         "tpg_gen" = tpg_comb_genus 
 #     ),
 #     use.names = TRUE,
 #     idcol = "approach"
@@ -253,18 +286,19 @@ tpg_comb <- readRDS(file.path(path_cache, "tpg_combined.rds"))
 tpg_comb[tpg %like% "_genus", tpg := sub("T", "TPG", tpg)]
 
 ## CWM plot ----
-cwm_plot <- ggplot(cwm_combined, aes(x = cwm_val, y = max_log_tu)) +
+# Subset to the most consistent CWM trait: size large
+cwm_plot <- ggplot(cwm_combined[trait=="size_large", ], aes(x = cwm_val, y = max_log_tu)) +
     facet_wrap(.~as.factor(region)) +
     geom_point(alpha = 0.5, shape = 1, size = 2) +
     geom_smooth(
-        data = ~ .x[region %in% c("California", "Midwest", "Southeast"), ],
+        data = ~ .x[region %in% c("California", "Midwest"), ],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
         color = "steelblue"
     ) +
     geom_smooth(
-        data = ~ .x[region %in% c("Northeast", "Northwest"), ],
+        data = ~ .x[region %in% c("Northeast", "Northwest", "Southeast"), ],
         method = "gam",
         formula = y ~ s(x),
         se = TRUE,
@@ -275,117 +309,108 @@ cwm_plot <- ggplot(cwm_combined, aes(x = cwm_val, y = max_log_tu)) +
     theme_bw() +
     theme(
         legend.position = "none",
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 16, face = "bold"),
         axis.text.x = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         ),
         axis.text.y = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         ),
         strip.text = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         )
     )
 ggsave(file.path(path_paper, "Graphs", "gam_lm_cwm_toxicity.png"),
     width = 35,
-    height = 30,
+    height = 20,
     units = "cm"
 )
 
 ## TPG plot ----
-tpg_plot <- ggplot(tpg_comb, aes(x = tpg_val, y = max_log_tu)) +
+# Removed T9 and T15 again, as they were not among the most consistent responding TPGs
+lm_tpg_fam_ls <- edf_tpg_fam[gam_or_lm=="lm",][["region_tpg_fam"]]
+gam_tpg_fam_ls <- edf_tpg_fam[gam_or_lm=="gam",][["region_tpg_fam"]]
+lm_tpg_gen_ls <- edf_tpg_genus[gam_or_lm=="lm",][["region_tpg_gen"]]
+gam_tpg_gen_ls <- edf_tpg_genus[gam_or_lm=="gam",][["region_tpg_gen"]]
+
+
+tpg_plot <- ggplot(tpg_comb[!tpg %in% c("TPG9_genus", "TPG15_genus", "TPG15_fam")], 
+                   aes(x = tpg_val, y = max_log_tu)) +
     facet_grid(as.factor(tpg) ~ as.factor(region)) +
     geom_point(alpha = 0.5, shape = 1, size = 2) +
     geom_smooth(
-        data = ~ .x[approach == "tpg_fam" &
-            (
-                (region == "California" & id != "California_TPG10_fam") |
-                (region == "Midwest" & !id %in% c("Midwest_TPG5_fam", "Midwest_TPG12_fam")) |
-                (region == "Southeast" & id != "Southeast_TPG1_fam") |
-                (region == "Northeast" & id %in% c("Northeast_TPG1_fam", "Northeast_TPG9_fam")) |
-                (region == "Northwest" & id %in% c("Northwest_TPG10_fam", "Northwest_TPG12_fam"))
-            ), ],
+        data = ~ .x[id %in% lm_tpg_fam_ls],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
         color = "gold"
     ) +
     geom_smooth(
-        data = ~ .x[approach == "tpg_fam" &
-            (
-                (region == "California" & id == "California_TPG10_fam") |
-                (region == "Midwest" & id %in% c("Midwest_TPG5_fam", "Midwest_TPG12_fam")) | 
-                (region == "Southeast" & id == "Southeast_TPG1_fam") | 
-                (region == "Northeast" & !id %in% c("Northeast_TPG1_fam", "Northeast_TPG9_fam"))|
-                (region == "Northwest" & !id %in% c("Northwest_TPG10_fam", "Northwest_TPG12_fam"))
-            ), ],
+        data = ~ .x[id %in% gam_tpg_fam_ls, ],
         method = "gam",
         formula = y ~ s(x),
         se = TRUE,
         color = "gold"
     ) +
     geom_smooth(
-        data = ~ .x[(region %in% c("California", "Midwest", "Southeast") | id %in% c(
-            "Northeast_T4_genus",
-            "Northwest_T4_genus",
-            "Northwest_T12_genus"
-        )) & approach == "tpg_gen", ],
+        data = ~ .x[id %in% c(lm_tpg_gen_ls, "California_T10_genus", "Midwest_T15_genus"), ],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
         color = "forestgreen"
     ) +
     geom_smooth(
-        data = ~ .x[id %in% c(
-            "Northeast_T10_genus",
-            "Northeast_T12_genus",
-            "Northwest_T10_genus"
-        ) & approach == "tpg_gen", ],
+        data = ~ .x[id %in% gam_tpg_gen_ls, ],
         method = "gam",
         formula = y ~ s(x),
         se = TRUE,
         color = "forestgreen"
     ) +
-   scale_x_continuous(limits = c(0, 0.35)) +
+    scale_x_continuous(limits = c(0, 0.5), 
+                       breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5)) +
     labs(x = "Abundance weighted-fraction TPG", 
          y = "Max logTU") +
     theme_bw() +
     theme(
         legend.position = "none",
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 16, face = "bold"),
         axis.text.x = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         ),
         axis.text.y = element_text(
             family = "Roboto Mono",
-            size = 14
+            size = 16
         ),
         strip.text = element_text(
             family = "Roboto Mono",
-            size = 14
-        )
+            size = 16
+        ),
+        panel.spacing.x = unit(6, "mm")
     )
 ggsave(file.path(path_paper, "Graphs", "gam_lm_tpg_toxicity.png"),
-    width = 35,
-    height = 40,
+    width = 38,
+    height = 45,
     units = "cm"
 )
 
 # How many values are above 0.3 for TPG values?
 tpg_comb[, .(.N, tpg_val, tpg), by = "region"] %>% 
-.[tpg_val > 0.3, (.N/N)*100, by = "tpg"] %>% 
+.[tpg_val > 0.5, (.N/N)*100, by = "tpg"] %>% 
 unique()
 
 
 # Summary table ----
 ## CWM table ----
+lm_cwm_ls <- edf_cwm[gam_or_lm=="lm",][["region_cwm"]]
+gam_cwm_ls <- edf_cwm[gam_or_lm=="gam",][["region_cwm"]]
+
 cwm_table <- rbind(
     lapply(
-        lm_cwm[c("California", "Midwest", "Southeast")],
+        lm_cwm[lm_cwm_ls],
         function(x) {
             broom::tidy(x)
         }
@@ -394,7 +419,7 @@ cwm_table <- rbind(
         setnames(., "statistic", "t"),
     rbind(
         lapply(
-            gam_cwm[c("Northeast", "Northwest")],
+            gam_cwm[gam_cwm_ls],
             function(x) {
                 broom::tidy(x, parametric = TRUE)
             }
@@ -402,7 +427,7 @@ cwm_table <- rbind(
             rbindlist(., idcol = "Region")%>% 
             setnames(., "statistic", "t"),
         lapply(
-            gam_cwm[c("Northeast", "Northwest")],
+            gam_cwm[gam_cwm_ls],
             function(x) {
                 broom::tidy(x, parametric = FALSE)
             }
@@ -415,33 +440,39 @@ cwm_table <- rbind(
     ),
     fill = TRUE
 )
-cwm_table[term == "cwm_val", term := "cwm_val_size_large"]
-cwm_table[term == "s(cwm_val)", term := "s(cwm_val_size_large)"]
+
+# Explained variance & deviance
+cwm_r2 <- lapply(lm_cwm[lm_cwm_ls], function(x) {
+  broom::glance(x)
+}) |>
+  rbindlist(, idcol = 'Region') |>
+  _[, c('Region', 'r.squared')] |> 
+  _[, r.squared := round(r.squared, digits=3)]
+
+cwm_dev <- lapply(gam_cwm[gam_cwm_ls], function(x) {
+  data.table('dev_explained' = summary(x)$dev.expl)
+}) |>
+  rbindlist(, idcol = 'Region') |> 
+  _[, dev_explained := round(dev_explained, digits=3)]
+
+cwm_table[cwm_r2, r_squared := r.squared, on = 'Region']
+cwm_table[cwm_dev, dev_explained := dev_explained, on = 'Region']
+cwm_table[,r_squared_dev_expl := coalesce(r_squared, dev_explained)]
+cwm_table[,p_p_gam := coalesce(p.value, p.value_gam)]
+cwm_table[, cwm_trait := sub("(.+)_(.+_.+)", "\\2", Region)]
+cwm_table[, Region := sub("(.+)_(.+_.+)", "\\1", Region)]
 # saveRDS(cwm_table, file.path(path_cache, "cwm_tabl_publ.rds"))
 
 ## TPG table ----
-# summary(lm_tpg_fam$Midwest_TPG15_fam)
+
+### Family level ----
+lm_tpg_fam_ls <- edf_tpg_fam[gam_or_lm=="lm",][["region_tpg_fam"]]
+gam_tpg_fam_ls <- edf_tpg_fam[gam_or_lm=="gam",][["region_tpg_fam"]]
 
 tpg_table_fam <- rbind(
     lapply(
         lm_tpg_fam[
-            !names(lm_tpg_fam) %in% c(
-                "California_TPG10_fam",
-                "Midwest_TPG5_fam",
-                "Midwest_TPG12_fam",
-                "Southeast_TPG1_fam",
-                "Northeast_TPG2_fam",
-                "Northeast_TPG5_fam",
-                "Northeast_TPG8_fam",
-                "Northeast_TPG10_fam",
-                "Northeast_TPG12_fam",
-                "Northwest_TPG1_fam",
-                "Northwest_TPG2_fam",
-                "Northwest_TPG5_fam",
-                "Northwest_TPG8_fam",
-                "Northwest_TPG9_fam"
-            )
-        ],
+            names(lm_tpg_fam) %in% lm_tpg_fam_ls],
         function(x) {
             broom::tidy(x)
         }
@@ -451,22 +482,7 @@ tpg_table_fam <- rbind(
     rbind(
         lapply(
             gam_tpg_fam[
-                names(lm_tpg_fam) %in% c(
-                    "California_TPG10_fam",
-                    "Midwest_TPG5_fam",
-                    "Midwest_TPG12_fam",
-                    "Southeast_TPG1_fam",
-                    "Northeast_TPG2_fam",
-                    "Northeast_TPG5_fam",
-                    "Northeast_TPG8_fam",
-                    "Northeast_TPG10_fam",
-                    "Northeast_TPG12_fam",
-                    "Northwest_TPG1_fam",
-                    "Northwest_TPG2_fam",
-                    "Northwest_TPG5_fam",
-                    "Northwest_TPG8_fam",
-                    "Northwest_TPG9_fam"
-                )
+                names(gam_tpg_fam) %in% gam_tpg_fam_ls
             ], function(x) {
                 broom::tidy(x, parametric = TRUE)
             }
@@ -475,23 +491,7 @@ tpg_table_fam <- rbind(
             setnames(., "statistic", "t"),
         lapply(
             gam_tpg_fam[
-                names(lm_tpg_fam) %in% c(
-                    "California_TPG10_fam",
-                    "Midwest_TPG5_fam",
-                    "Midwest_TPG12_fam",
-                    "Southeast_TPG1_fam",
-                    "Northeast_TPG2_fam",
-                    "Northeast_TPG5_fam",
-                    "Northeast_TPG8_fam",
-                    "Northeast_TPG10_fam",
-                    "Northeast_TPG12_fam",
-                    "Northwest_TPG1_fam",
-                    "Northwest_TPG2_fam",
-                    "Northwest_TPG5_fam",
-                    "Northwest_TPG8_fam",
-                    "Northwest_TPG9_fam"
-                )
-            ], function(x) {
+                names(gam_tpg_fam) %in% gam_tpg_fam_ls], function(x) {
                 broom::tidy(x, parametric = FALSE)
             }
         ) %>%
@@ -504,7 +504,7 @@ tpg_table_fam <- rbind(
     .[order(Region_TPG), ],
     fill = TRUE
 ) 
-tpg_table_fam[(p.value > 0.05 | p.value_gam > 0.05) & term != "(Intercept)"]
+# tpg_table_fam[(p.value > 0.05 | p.value_gam > 0.05) & term != "(Intercept)"]
 tpg_table_fam[, `:=`(
     estimate = round(estimate, digits = 2),
     std.error = round(std.error, digits = 2),
@@ -521,16 +521,38 @@ tpg_table_fam[, `:=`(
         paste(round(p.value_gam, digits = 3))
     )
 )]
+
+# Explained variance/deviance
+tpg_fam_r2 <- lapply(lm_tpg_fam[names(lm_tpg_fam) %in% lm_tpg_fam_ls], function(x) {
+  broom::glance(x)
+}) |>
+  rbindlist(, idcol = 'Region_TPG') |>
+  _[, c('Region_TPG', 'r.squared')] |>
+  _[, r.squared := round(r.squared, digits = 3)]
+
+tpg_fam_dev <- lapply(gam_tpg_fam[names(gam_tpg_fam) %in% gam_tpg_fam_ls], function(x) {
+  data.table('dev_explained' = summary(x)$dev.expl)
+}) |>
+  rbindlist(, idcol = 'Region_TPG') |>
+  _[, dev_explained := round(dev_explained, digits = 3)]
+
+tpg_table_fam[tpg_fam_r2, r_squared := r.squared, on = 'Region_TPG']
+tpg_table_fam[tpg_fam_dev, dev_explained := dev_explained, on = 'Region_TPG']
+tpg_table_fam[,r_squared_dev_expl := coalesce(r_squared, dev_explained)]
+tpg_table_fam[,p_p_gam := coalesce(p.value, p.value_gam)]
+tpg_table_fam[, TPG := sub("(.+)_(.+_.+)", "\\2", Region_TPG)]
+tpg_table_fam[, Region := sub("(.+)_(.+_.+)", "\\1", Region_TPG)]
 # saveRDS(tpg_table_fam, file.path(path_cache, "tpg_tabl_publ.rds"))
+
+
+### Genus level ----
+lm_tpg_gen_ls <- edf_tpg_genus[gam_or_lm=="lm",][["region_tpg_gen"]]
+gam_tpg_gen_ls <- edf_tpg_genus[gam_or_lm=="gam",][["region_tpg_gen"]]
+
 tpg_table_genus <- rbind(
     lapply(
         lm_tpg_gen[
-            names(lm_tpg_gen) %in% c(
-                "Northeast_T4_genus",
-                "Northwest_T4_genus",
-                "Northwest_T12_genus"
-            ) |
-                names(lm_tpg_gen) %like% "California.*|Midwest.*|Southeast.*"
+            names(lm_tpg_gen) %in% lm_tpg_gen_ls
         ],
         function(x) {
             broom::tidy(x)
@@ -544,11 +566,7 @@ tpg_table_genus <- rbind(
     rbind(
         lapply(
             gam_tpg_gen[
-                names(gam_tpg_gen) %in% c(
-                    "Northeast_T10_genus",
-                    "Northeast_T12_genus",
-                    "Northwest_T10_genus"
-                )
+                names(gam_tpg_gen) %in% gam_tpg_gen_ls
             ],
             function(x) {
                 broom::tidy(x, parametric = TRUE)
@@ -565,11 +583,7 @@ tpg_table_genus <- rbind(
             ),
         lapply(
             gam_tpg_gen[
-                names(gam_tpg_gen) %in% c(
-                    "Northeast_T10_genus",
-                    "Northeast_T12_genus",
-                    "Northwest_T10_genus"
-                )
+                names(gam_tpg_gen) %in% gam_tpg_gen_ls
             ],
             function(x) {
                 broom::tidy(x, parametric = FALSE)
@@ -606,12 +620,37 @@ tpg_table_genus[, `:=`(
         paste(round(p.value_gam, digits = 3))
     )
 )]
+
+# Explained Variance/Deviance
+tpg_gen_r2 <- lapply(lm_tpg_gen[names(lm_tpg_gen) %in% lm_tpg_gen_ls], function(x) {
+  broom::glance(x)
+}) |>
+  rbindlist(, idcol = 'Region_TPG') |>
+  _[, c('Region_TPG', 'r.squared')] |>
+  _[, r.squared := round(r.squared, digits = 3)]
+
+tpg_gen_dev <- lapply(gam_tpg_gen[names(gam_tpg_gen) %in% gam_tpg_gen_ls], function(x) {
+  data.table('dev_explained' = summary(x)$dev.expl)
+}) |>
+  rbindlist(, idcol = 'Region_TPG') |>
+  _[, dev_explained := round(dev_explained, digits = 3)]
+
+# Postprocessing
+tpg_table_genus[tpg_gen_r2, r_squared := r.squared, on = 'Region_TPG']
+tpg_table_genus[tpg_gen_dev, dev_explained := dev_explained, on = 'Region_TPG']
+tpg_table_genus[,r_squared_dev_expl := coalesce(r_squared, dev_explained)]
+tpg_table_genus[,p_p_gam := coalesce(p.value, p.value_gam)]
+tpg_table_genus[, TPG := sub("(.+)_(.+_.+)", "\\2", Region_TPG)]
+tpg_table_genus[, Region := sub("(.+)_(.+_.+)", "\\1", Region_TPG)]
 # saveRDS(tpg_table_genus, file.path(path_cache, "tpg_tabl_genus_publ.rds"))
 
-# Tables for publication
+
+# Tables for publication ----
+## CWM ----
 cwm_table <- readRDS(file.path(path_cache, "cwm_tabl_publ.rds"))
 cwm_table[, .(
     Region,
+    cwm_trait,
     term,
     estimate = round(estimate, digits = 2),
     std.error = round(std.error, digits = 2),
@@ -619,7 +658,9 @@ cwm_table[, .(
     p.value = round(p.value, digits = 3),
     edf = round(edf, digits = 2),
     F = round(F, digits = 2),
-    p.value_gam = round(p.value_gam, digits = 3)
+    p.value_gam = round(p.value_gam, digits = 3),
+    R2 = round(r_squared, digits = 3), 
+    Deviance = round(dev_explained, digits = 3)
 )] %>%
     .[, `:=`(
         p.value = fifelse(p.value == 0, "< 0.001", paste(p.value)),
@@ -628,68 +669,38 @@ cwm_table[, .(
     .[order(Region), ] %>%  
 fwrite(., file.path(path_paper, "Tables", "CWM_log_tu_results.csv"))
 
+## TPGs ----
 tpg_table_fam <- readRDS(file.path(path_cache, "tpg_tabl_publ.rds"))
-tpg_table_fam[, Region := sub("^(.+)(_)(.+)(_)(.+)", "\\1", Region_TPG)]
-tpg_table_fam[, TPG := sub("^(.+)(_)(.+)(_)(.+)", "\\3\\4\\5", Region_TPG)]
-
 tpg_table_genus <- readRDS(file.path(path_cache, "tpg_tabl_genus_publ.rds"))
-tpg_table_genus[, Region := sub("^(.+)(_)(.+)(_)(.+)", "\\1", Region_TPG)]
-tpg_table_genus[, TPG := sub("^(.+)(_)(.+)(_)(.+)", "\\3\\4\\5", Region_TPG)]
 
 tpg_table_final <- rbind(
-    tpg_table_fam[, .(
-        Region,
-        TPG,
-        term,
-        estimate,
-        std.error,
-        t,
-        p.value,
-        edf,
-        F,
-        p.value_gam
+    tpg_table_fam[, c(
+        "Region",
+        "TPG",
+        "term",
+        "estimate",
+        "std.error",
+        "t",
+        "p_p_gam",
+        "edf",
+        "F",
+        "r_squared_dev_expl"
     )],
-    tpg_table_genus[, .(
-        Region,
-        TPG,
-        term,
-        estimate,
-        std.error,
-        t,
-        p.value,
-        edf,
-        F,
-        p.value_gam
+    tpg_table_genus[, c(
+        "Region",
+        "TPG",
+        "term",
+        "estimate",
+        "std.error",
+        "t",
+        "p_p_gam",
+        "edf",
+        "F",
+        "r_squared_dev_expl"
     )]
 ) 
+tpg_table_final[, Taxonomic_resolution := ifelse(grepl("_fam", TPG), "family_level", "genus_level")]
+tpg_table_final = tpg_table_final[order(Taxonomic_resolution, Region), ]
 tpg_table_final[, edf := round(edf, digits = 2)] %>%
+  .[, .SD, .SDcols = !names(tpg_table_final) %in% "Taxonomic_resolution"] %>%
     fwrite(., file.path(path_paper, "Tables", "TPG_log_tu_results.csv"))
-
-
-# Mclust approach
-# TODO 
-# - fix variance
-# - do this for every region
-# - do wilcox.test subseqnetly
-# Load necessary package
-# library(mclust)
-
-# cwm_combined[region == "Northwest", {
-#     mclust_fit <- Mclust(max_log_tu, G = 2)
-#     .(
-#         bimod_mean = mclust_fit$parameters$mean,
-#         bimod_var = mclust_fit$parameters$variance
-#     )
-# }]
-# # MWU/wilcox test
-# lapply(cwm_combined[region == "Northeast", ])
-# wilcox.test(
-#     x = x[max_log_tu == -5, cwm_val],
-#     y = x[max_log_tu != 5, cwm_val]
-# )
-# cwm_combined[, cens := fifelse(max_log_tu == -5, 1, 0)]
-# cwm_combined[region == "Southeast",
-#     wilcox.test(
-#         x = .SD[cens == 1, cwm_val],
-#         y = .SD[cens == 0, cwm_val]
-#     )]
