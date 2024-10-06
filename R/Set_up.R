@@ -14,11 +14,11 @@ library(purrr)
 
 # Retrieval of taxonomic information and habitat information
 # library(taxize)
-library(worms)
+# library(worms)
 
 # Retrieval of ecotoxicological test  information
 library(standartox)
-library(chemlook)
+# library(chemlook)
 
 # Plotting & tables
 library(ggplot2)

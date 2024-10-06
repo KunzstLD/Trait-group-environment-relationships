@@ -559,7 +559,7 @@ perform_xgboost <- function(x,
 #   }
 # }
 
-# Bootstrapping to estimate confindence intervals for the 
+# Bootstrapping to estimate confidence intervals for the 
 # prediction and test errors
 bootstrap_ci_rmse <- function(
     x,
