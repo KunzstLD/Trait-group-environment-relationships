@@ -180,6 +180,9 @@ max_tu[
   by = "pesticide"
 ]
 
+# Pesticide with the hightest maxTU value
+max_tu[max_log_tu >= 1.5, ]
+
 # Atrazine: Occurrences as most toxic pesticide
 max_tu[pesticide == "Atrazine", .N, by = "Region"]
 Hmisc::describe(max_tu[pesticide == "Atrazine", .(max_log_tu)])
@@ -213,7 +216,7 @@ ggplot(max_tu, aes(x = Region, y = max_log_tu)) +
       label = round(median, digits = 2)
     ),
     size = 6,
-    nudge_x = -.19
+    nudge_x = -.25
   ) +
   scale_x_discrete(labels = c(
     "California (n = 85)",
@@ -222,17 +225,17 @@ ggplot(max_tu, aes(x = Region, y = max_log_tu)) +
     "Northwest (n = 87)",
     "Southeast (n = 76)"
   )) +
-  labs(y = "Max Log TU") +
+  labs(x = "", y = "Max Log TU") +
   theme_bw() +
   theme(
-    axis.title = element_text(size = 16),
+    axis.title = element_text(size = 16, face = "bold"),
     axis.text.x = element_text(
       family = "Roboto Mono",
-      size = 14
+      size = 16
     ),
     axis.text.y = element_text(
       family = "Roboto Mono",
-      size = 14
+      size = 16
     ),
     legend.position = "none",
   )
@@ -240,7 +243,7 @@ ggsave(
   filename = file.path(path_paper,
                        "Graphs",
                        "max_tu_overview.png"),
-  width = 50,
-  height = 30,
+  width = 35,
+  height = 20,
   units = "cm"
 )
