@@ -69,24 +69,22 @@ abund_subs <- abund_subs[!is.na(max_log_tu), ]
 # Final EPT data
 # saveRDS(abund_subs, file.path(path_cache, "ept.rds"))
 
-# GAMs & LMs ----
-# - Significant coeff. in California and Northwest
-# - Negative relationship in California, Midwest, 
-# Northwest, Southeast
-# - Positive relationship in Northeast (tough not significant) -> why?
+#_______________________________________________________________________________
+
+# GAMs & LMs with pesticide toxicity ----
 lm_ept <- list()
 sim_res_ept <- list()
 gam_ept <- list()
 gam_assump_ept <- list()
 for (i in unique(abund_subs$Region)) {
-    lm_ept[[i]] <- lm(max_log_tu ~ frac_EPT,
+    lm_ept[[i]] <- lm(frac_EPT ~ max_log_tu,
         data = abund_subs[Region == i, ]
     )
 
     sim_res_ept[[i]] <- simulateResiduals(fittedModel = lm_ept[[i]])
 
     gam_ept[[i]] <- gam(
-        max_log_tu ~ s(frac_EPT),
+        frac_EPT ~ s(max_log_tu),
         data = abund_subs[Region == i, ],
         method = "REML"
     )
@@ -95,51 +93,45 @@ for (i in unique(abund_subs$Region)) {
 }
 
 ## Diagnostics ----
+# Extract EDF & significance of smooth term
+edf_ept <- extractEDF(gam_object=gam_ept, idcol="Region")
 
-# EDF
-edf_ept <- list()
-for(i in names(gam_ept)){
-  edf_ <- broom::tidy(gam_ept[[i]], parametric=FALSE)
-  edf_ept[[i]] <- data.table(edf = edf_$edf, gam_or_lm = ifelse(edf_$edf > 1.01, "gam", "lm"))
-}
-edf_ept <- rbindlist(edf_ept, idcol = "Region")
-
-# GAM
-# All linear except Midwest & California
+# GAM & LM plots
 par(mfrow = c(2,3))
 for(i in names(gam_ept)){
-    plot(gam_ept[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
+    plot(gam_ept[[i]], main = i, residuals = TRUE, pch = 1, ylab = "frac_EPT")
 }
-lapply(gam_ept, summary)
 
-# LM
 for(i in names(sim_res_ept)){
     plot(sim_res_ept[[i]], main = i)
 }
 
-
+#_______________________________________________________________________________
 # Plotting ----
-ggplot(abund_subs, aes(x = frac_EPT, y = max_log_tu)) +
+gam_region_ept <- edf_ept[gam_or_lm == "gam", ][["Region"]]
+lm_region_ept <- edf_ept[gam_or_lm == "lm", ][["Region"]]
+
+ggplot(abund_subs, aes(x = max_log_tu, y = frac_EPT)) +
     facet_wrap(as.factor(Region) ~.) +
     geom_point(alpha = 0.5, shape = 1, size = 2) +
     geom_smooth(
-        data = ~ .x[!Region %in% c("California", "Midwest"), ],
+        data = ~ .x[Region %in% lm_region_ept, ],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
         color = "steelblue"
     ) +
     labs(
-        x = "Fraction EPT taxa per site",
-        y = "Max logTU"
+        x = "Max logTU",
+        y = "Fraction EPT taxa per site"
     ) + 
     geom_smooth(
-        data = ~ .x[Region %in% c("California", "Midwest"), ],
+        data = ~ .x[Region %in% gam_region_ept, ],
         method = "gam",
         formula = y ~ s(x),
         se = TRUE,
         color = "steelblue"
-    ) +
+        ) +
     theme_bw() +
     theme(
         legend.position = "none",
@@ -166,7 +158,7 @@ ggsave(file.path(path_paper, "Graphs", "EPT_toxicity.png"),
 # Summary Table EPT ----
 ept_table <- rbind(
     lapply(
-        lm_ept[c("Northeast", "Northwest", "Southeast")],
+        lm_ept[lm_region_ept],
         function(x) {
             broom::tidy(x)
         }
@@ -175,7 +167,7 @@ ept_table <- rbind(
         setnames(., "statistic", "t"),
     rbind(
         lapply(
-            gam_ept[c("California","Midwest")],
+            gam_ept[gam_region_ept],
             function(x) {
                 broom::tidy(x, parametric = TRUE)
             }
@@ -183,7 +175,7 @@ ept_table <- rbind(
             rbindlist(., idcol = "Region") %>%
             setnames(., "statistic", "t"),
         lapply(
-            gam_ept[c("California","Midwest")],
+            gam_ept[gam_region_ept],
             function(x) {
                 broom::tidy(x, parametric = FALSE)
             }
@@ -198,42 +190,45 @@ ept_table <- rbind(
     ),
     fill = TRUE
 )
-ept_gof <- lapply(lm_ept, broom::glance) %>%
-    rbindlist(., idcol = "Region")
 ept_table[, `:=`(
-    estimate = round(estimate, digits = 2),
-    std.error = round(std.error, digits = 2),
-    t = round(t, digits = 2),
-    F = round(F, digits = 2),
-    p.value = fifelse(
-        round(p.value, digits = 3) == 0,
-        "<0.01",
-        paste(round(p.value, digits = 3))
-    ),
-    p.value_gam = fifelse(
-        round(p.value_gam, digits = 3) == 0,
-        "<0.01",
-        paste(round(p.value_gam, digits = 3))
-    ), 
-    edf = round(edf, digits = 2),
-    ref.df = round(ref.df, digits = 2)
+  estimate = round(estimate, digits = 2),
+  std.error = round(std.error, digits = 2),
+  t = round(t, digits = 2),
+  F = round(F, digits = 2),
+  p.value = fifelse(
+    round(p.value, digits = 3) == 0,
+    "<0.01",
+    paste(round(p.value, digits = 3))
+  ),
+  p.value_gam = fifelse(
+    round(p.value_gam, digits = 3) == 0,
+    "<0.01",
+    paste(round(p.value_gam, digits = 3))
+  ), 
+  edf = round(edf, digits = 2),
+  ref.df = round(ref.df, digits = 2)
 )]
 
-# Add R2 or deviance
-ept_table[ept_gof[!Region %in% c("California", "Midwest"), ],
-    r.squared := i.r.squared,
-    on = "Region"
-]
-ept_dev <- lapply(gam_ept[c("California", "Midwest")], function(x) {
+# Add R2 and deviance 
+ept_gof <- lapply(lm_ept[lm_region_ept], broom::glance) %>%
+    rbindlist(., idcol = "Region")
+ept_dev <- lapply(gam_ept[gam_region_ept], function(x) {
   data.table("dev_explained" = summary(x)$dev.expl)
 }) |>
   rbindlist(, idcol = "Region") |> 
   _[, dev_explained := round(dev_explained, digits=3)]
 
+# Merge R2 and deviance
+ept_table[ept_gof,
+          r.squared := i.r.squared,
+          on = "Region"
+]
 ept_table[ept_dev, dev_explained := i.dev_explained, on="Region"]
 ept_table[,r_squared_dev_expl := coalesce(r.squared, dev_explained)]
 ept_table[, r_squared_dev_expl := round(r_squared_dev_expl, digits = 3)]
 ept_table[,p_p_gam := coalesce(p.value, p.value_gam)]
+ept_table[term != "(Intercept)", ]
+
 setcolorder(
     ept_table,
     c("Region", "term", "estimate", "std.error", "t", "p_p_gam", "r_squared_dev_expl")

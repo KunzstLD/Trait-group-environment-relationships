@@ -22,10 +22,9 @@ abund[trait_family, group_family := i.group, on = "family"]
 # genus level
 abund[trait_genera, group_genus := i.group, on = "genus"]
 
-# Families which are not classified to a certain TPG
-# throw out for now
-# unique(abund[is.na(group), .(family, order), by = "Region"])
-# also not used in CWM approach?
+abund[Region=="California" & group_family==10, order] |> unique()
+trait_family[family=="Muscidae", ]
+
 
 # Some taxa have a relatively high abundance (up to > 8000)
 # use sqrt tranformation

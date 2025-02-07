@@ -149,6 +149,8 @@ for (i in regions) {
     )
 }
 traits_expanded <- rbindlist(traits_expanded, idcol="region")
+saveRDS(traits_expanded, file.path(path_cache, "traits_expanded.rds"))
+traits_expanded[, .SD[1:15], by="region"]
 
 # Calc the correlation
 # Region grid for comparison

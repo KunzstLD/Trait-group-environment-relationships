@@ -142,6 +142,22 @@ ci_pred_error <- dcast(ci_pred_error, ... ~ quantile,
   value.var = c("CI_rmse_train", "CI_rmse_test")
 )
 
+# Create output table
+# fwrite(ci_pred_error[, .(
+#   approach,
+#   region,
+#   `CI_mse_train_2.5%` = round(`CI_rmse_train_2.5%` ^
+#                                  2, digits = 2),
+#   `CI_mse_train_97.5%` = round(`CI_rmse_train_97.5%` ^
+#                                   2, digits = 2),
+#   `CI_mse_test_2.5%` = round(`CI_rmse_test_2.5%` ^ 2, digits =
+#                                 2),
+#   `CI_mse_test_97.5` = round(`CI_rmse_test_97.5%` ^ 2, digits =
+#                                 2)
+# )],
+# file.path(path_paper, "Tables", "ci_pred_error.csv"))
+
+# Create paper plot
 pred_error[ci_pred_error,
   `:=`(
     CI_rmse_train_2.5 = `i.CI_rmse_train_2.5%`,
@@ -151,6 +167,7 @@ pred_error[ci_pred_error,
   ),
   on = c("region", "approach")
 ]
+saveRDS(pred_error, file.path(path_cache, "pred_error.rds"))
 
 ggplot(pred_error) +
   geom_point(aes(x = approach, y = pred_test^2)) +
@@ -178,7 +195,7 @@ ggplot(pred_error) +
   ) +
   facet_wrap(. ~ region) +
   labs(x = "", y = "MSE") +
-  scale_x_discrete(labels = c("CWM", "TPG \n (family)", "TPG \n (genus)")) +
+  scale_x_discrete(labels = c("Traits", "TPG \n (family)", "TPG \n (genus)")) +
   theme_bw() +
   theme(
     axis.title = element_text(size = 16, face="bold"),

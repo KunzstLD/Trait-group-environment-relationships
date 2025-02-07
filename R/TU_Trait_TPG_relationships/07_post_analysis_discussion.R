@@ -10,6 +10,8 @@ abund_family <- readRDS(file.path(path_cache, "tpg_taxonomic_composition_family.
 abund_family[, Region := ifelse(Region=="PN", "Northwest", Region)]
 abund_family[, Region_TPG := paste0(Region, "_TPG", group, "_fam")]
 
+abund_family[Region=='California' & group==5,]
+
 # TPGs with results for ind. LM/GAM models
 # Only calculated for the most responsive TPGs
 tpg_table_fam <- readRDS(file.path(path_cache, "tpg_tabl_publ.rds"))

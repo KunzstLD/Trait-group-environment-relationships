@@ -134,20 +134,21 @@ result_spear <- rbindlist(result_spear, fill = TRUE) #idcol = "Region"
 # result_spear[, Region := sub("SPEAR_", "", Region)]
 result_spear[Region == "PN", Region := "Northwest"]
 
+# ______________________________________________________________________________
 # GAMs & LMs ----
 lm_spear <- list()
 sim_res_spear <- list()
 gam_spear <- list()
 gam_assump_spear <- list()
 for (i in unique(result_spear$Region)) {
-    lm_spear[[i]] <- lm(max_log_tu ~ SPEAR_Pestizide,
+    lm_spear[[i]] <- lm(SPEAR_Pestizide ~ max_log_tu,
         data = result_spear[Region == i, ]
     )
 
     sim_res_spear[[i]] <- simulateResiduals(fittedModel = lm_spear[[i]])
 
     gam_spear[[i]] <- gam(
-        max_log_tu ~ s(SPEAR_Pestizide),
+        SPEAR_Pestizide ~ s(max_log_tu),
         data = result_spear[Region == i, ],
         method = "REML"
     )
@@ -156,49 +157,44 @@ for (i in unique(result_spear$Region)) {
 }
 
 ## Diagnostics ----
-
 # EDF
-edf_spear <- list()
-for(i in names(gam_spear)){
-  edf_ <- broom::tidy(gam_spear[[i]], parametric=FALSE)
-  edf_spear[[i]] <- data.table(edf = edf_$edf, gam_or_lm = ifelse(edf_$edf > 1.01, "gam", "lm"))
-}
-edf_spear <- rbindlist(edf_spear, idcol = "Region")
+edf_spear <- extractEDF(gam_object=gam_spear, idcol="Region")
 
-# GAM
-# All linear except Northeast
+# GAM & LM visual inspection
 par(mfrow = c(2,3))
 for(i in names(gam_spear)){
     plot(gam_spear[[i]], main = i, residuals = TRUE, pch = 1, ylab = "max_log_TU")
 }
 lapply(gam_spear, summary)
 
-# LM
 for(i in names(sim_res_spear)){
     plot(sim_res_spear[[i]], main = i)
 }
 
 # Plotting ----
-ggplot(result_spear, aes(x = SPEAR_Pestizide, y = max_log_tu)) +
+gam_region_spear <- edf_spear[gam_or_lm == "gam", ][["Region"]]
+lm_region_spear <- edf_spear[gam_or_lm == "lm", ][["Region"]]
+
+ggplot(result_spear, aes(x = max_log_tu, y = SPEAR_Pestizide)) +
     facet_wrap(as.factor(Region) ~.) +
     geom_point(alpha = 0.5, shape = 1, size = 2) +
     geom_smooth(
-        data = ~ .x[Region %in% c("Northwest", "Southeast")],
+        data = ~ .x[Region %in% lm_region_spear],
         method = "lm",
         formula = y ~ x,
         se = TRUE,
         color = "steelblue"
     ) +
     geom_smooth(
-        data = ~ .x[Region %in% c("California", "Midwest", "Northeast"), ],
+        data = ~ .x[Region %in% gam_region_spear, ],
         method = "gam",
         formula = y ~ s(x),
         se = TRUE,
         color = "steelblue"
     ) +
     labs(
-        x = "SPEAR pesticides",
-        y = "Max logTU"
+        x = "Max logTU",
+        y = "SPEAR pesticides"
     ) +
     theme_bw() +
     theme(
@@ -226,7 +222,7 @@ ggsave(file.path(path_paper, "Graphs", "SPEAR_toxicity.png"),
 # Summary Table SPEAR ----
 spear_table <- rbind(
     lapply(
-        lm_spear[c("Northwest", "Southeast")],
+        lm_spear[lm_region_spear],
         function(x) {
             broom::tidy(x)
         }
@@ -235,7 +231,7 @@ spear_table <- rbind(
         setnames(., "statistic", "t"),
     rbind(
         lapply(
-            gam_spear[c("California", "Midwest", "Northeast")],
+            gam_spear[gam_region_spear],
             function(x) {
                 broom::tidy(x, parametric = TRUE)
             }
@@ -243,7 +239,7 @@ spear_table <- rbind(
             rbindlist(., idcol = "Region") %>%
             setnames(., "statistic", "t"),
         lapply(
-            gam_spear[c("California", "Midwest", "Northeast")],
+            gam_spear[gam_region_spear],
             function(x) {
                 broom::tidy(x, parametric = FALSE)
             }
@@ -258,42 +254,45 @@ spear_table <- rbind(
     ),
     fill = TRUE
 )
-# spear_table[p.value <= 0.05, ]
-spear_gof <- lapply(lm_spear[c("Northwest", "Southeast")], broom::glance) %>%
-    rbindlist(., idcol = "Region")
+
 spear_table[, `:=`(
-    estimate = round(estimate, digits = 2),
-    std.error = round(std.error, digits = 2),
-    t = round(t, digits = 2),
-    F = round(F, digits = 2),
-    p.value = fifelse(
-        round(p.value, digits = 3) == 0,
-        "<0.01",
-        paste(round(p.value, digits = 3))
-    ),
-    p.value_gam = fifelse(
-        round(p.value_gam, digits = 3) == 0,
-        "<0.01",
-        paste(round(p.value_gam, digits = 3))
-    ), 
-    edf = round(edf, digits = 2),
-    ref.df = round(ref.df, digits = 2)
+  estimate = round(estimate, digits = 2),
+  std.error = round(std.error, digits = 2),
+  t = round(t, digits = 2),
+  F = round(F, digits = 2),
+  p.value = fifelse(
+    round(p.value, digits = 3) == 0,
+    "<0.01",
+    paste(round(p.value, digits = 3))
+  ),
+  p.value_gam = fifelse(
+    round(p.value_gam, digits = 3) == 0,
+    "<0.01",
+    paste(round(p.value_gam, digits = 3))
+  ), 
+  edf = round(edf, digits = 2),
+  ref.df = round(ref.df, digits = 2)
 )]
 
-# Add R2 or deviance
-spear_table[spear_gof,
-    r.squared := i.r.squared,
-    on = "Region"
-]
-spear_dev <- lapply(gam_spear[c("California", "Midwest", "Northeast")], function(x) {
+# Add R2 from LM or deviance from GAMS
+spear_gof <- lapply(lm_spear[lm_region_spear], broom::glance) %>%
+  rbindlist(., idcol = "Region")
+spear_dev <- lapply(gam_spear[gam_region_spear], function(x) {
   data.table("dev_explained" = summary(x)$dev.expl)
 }) |>
-  rbindlist(, idcol = "Region") |> 
-  _[, dev_explained := round(dev_explained, digits=3)]
+  rbindlist(, idcol = "Region") |>
+  _[, dev_explained := round(dev_explained, digits = 3)]
+
+# Merge R2 and deviance
+spear_table[spear_gof,
+            r.squared := i.r.squared,
+            on = "Region"
+]
 spear_table[spear_dev, dev_explained := i.dev_explained, on="Region"]
 spear_table[,r_squared_dev_expl := coalesce(r.squared, dev_explained)]
 spear_table[, r_squared_dev_expl := round(r_squared_dev_expl, digits = 3)]
 spear_table[,p_p_gam := coalesce(p.value, p.value_gam)]
+spear_table[term != "(Intercept)",]
 
 setcolorder(spear_table,
     c("Region", "term", "estimate", "std.error", "t", "p_p_gam", "r_squared_dev_expl")
