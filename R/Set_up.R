@@ -49,17 +49,22 @@ library(DALEXtra)
 # LM and GAMs
 library(DHARMa)
 library(mgcv)
+library(gratia)
+
+# RDA
+library(vegan)
+library(corrplot)
 
 ## Paths
-path_in <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Data"
-path_cache <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Cache"
-path_scr <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R"
-path_repo <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships"
-path_out <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Output"
-path_paper <- "/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/Paper"
+path_base <- "C:/Users/sk193/Documents/PhD/Trait-group-environment-relationships"
+path_in <- file.path(path_base, "Data")
+path_cache <- file.path(path_base, "Cache")
+path_src <- file.path(path_base, "R")
+path_out <- file.path(path_base, "Output")
+path_paper <- file.path(path_base, "Paper")
 
 ## Functions
-source("/home/kunzst/Dokumente/Projects/Trait_DB/Trait-group-environment-relationships/R/Functions.R")
+source(file.path(path_src, "Functions.R"))
 
 ## North American harmonised trait dataset
 # TODO: necessary to load this?

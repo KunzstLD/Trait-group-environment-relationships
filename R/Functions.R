@@ -596,6 +596,24 @@ bootstrap_ci_rmse <- function(
   )
 }
 
+## GAMs ----
+# Function to extract EDF and P value of smooth terms
+extractEDF <- function(gam_object, idcol) {
+  edf_ls <- list()
+  for (i in names(gam_object)) {
+    edf_ <- broom::tidy(gam_object[[i]], parametric = FALSE)
+    edf_ls[[i]] <- data.table(
+      edf = edf_$edf,
+      p_smooth_terms = edf_$p.value,
+      gam_or_lm = ifelse(edf_$edf > 1.01 &
+                           edf_$p.value <= 0.05, "gam", "lm")
+    )
+  }
+  edf_dt <- rbindlist(edf_ls, idcol = idcol)
+  edf_dt
+}
+
+
 # General helper functions ----
 
 ## Google search ----
