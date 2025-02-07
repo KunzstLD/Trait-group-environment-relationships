@@ -138,6 +138,8 @@ summary_max_tu <- max_tu[, lapply(summary_funs, function(f) f(max_log_tu)),
   by = "Region"
 ]
 
+max_tu[, quantile(max_log_tu, seq(0, 1, 0.25)), by = "Region"]
+
 # Pesticides that contributed most often to maxTU 
 # SI Table
 max_tu[, .(cas, .N), by = c("pesticide", "Region")] %>%
