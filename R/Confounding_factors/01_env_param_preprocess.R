@@ -47,12 +47,10 @@ env_param <- fread(file.path(
 ))
 setnames(env_param, "TSTAID", "site")
 
-# Subset to sites with biological info
-env_param <- env_param[`Has Inverts` == "y" & site %in% sites_bio, ]
-
 # Subset to relevant columns
 env_param <- env_param[, .(
     site,
+    `Has Inverts`,
     SubstrateD84.M,
     WetWidthIQR.STD,
     DMax_42day.M,
@@ -62,6 +60,9 @@ env_param <- env_param[, .(
     orthoP_4wk.median,
     NO3NO2_4wk.median
 )]
+
+# Riffle frc for midwest needs to be divided by 100. There's one NA, which we omit
+env_param[Riffle.FRC > 1, Riffle.FRC := Riffle.FRC / 100]
 
 # CWM traits and abundance weighted fraction TPGs (family level)
 data_cwm <- readRDS(file.path(path_cache, "data_cwm_final.rds"))
@@ -73,6 +74,9 @@ trait_groups_rel_genus <- trait_groups_rel$genus_lvl
 sites_bio <- lapply(data_cwm, function(x) {
     if ("STAID" %in% names(x)) unique(x$STAID) else unique(x$site)
 }) %>% Reduce(c, .)
+
+# Subset to sites with biological info
+env_param <- env_param[`Has Inverts` == "y" & site %in% sites_bio, ]
 
 # Merge with biological data & toxicity data
 # Responding CWMtraits: gatherer, predator, sens. organic
@@ -127,7 +131,8 @@ data_tpg_env_fam <- lapply(data_tpg_env_fam, function(x) {
             "T8",
             "T9",
             "T10",
-            "T12"
+            "T12",
+            "T15"
         )
     ], measure.vars = c(
         "T1",
@@ -136,14 +141,15 @@ data_tpg_env_fam <- lapply(data_tpg_env_fam, function(x) {
         "T8",
         "T9",
         "T10",
-        "T12"
+        "T12",
+        "T15"
     ),
     variable.name = "tpg")
 })
 
 # Add family label
 lapply(data_tpg_env_fam, function(x) x[, tpg := paste0(sub("T", "TPG", tpg), "_fam")])
-saveRDS(data_tpg_env_fam, file.path(path_cache, "data_tpg_env_fam_fam.rds"))
+saveRDS(data_tpg_env_fam, file.path(path_cache, "data_tpg_env_fam.rds"))
 
 # Genus lvl data
 data_tpg_env_genus <- lapply(trait_groups_rel_genus, function(x) {

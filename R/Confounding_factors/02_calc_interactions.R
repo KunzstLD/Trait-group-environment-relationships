@@ -1,9 +1,9 @@
-# _____________________________________________________________
+# ______________________________________________________________________________
 # Calculating Interactions ----
 # TODO: 
 # -> need to decide how much of the results should be shown
 # -> CWM interactions only in California for size large -> is size large relevant there?
-# _____________________________________________________________
+# ______________________________________________________________________________
 
 # Load data
 data_cwm_env <- readRDS(file.path(path_cache, "data_cwm_env.rds"))
@@ -12,9 +12,6 @@ data_tpg_env_genus <- readRDS(file.path(path_cache, "data_tpg_env_genus.rds"))
 
 # Interactions fitted for cwm traits, tpgs, ept and spear 
 interactions <- list(
-    "max_log_tu * Riffle.FRC",
-    "max_log_tu * Temp.median",
-    "max_log_tu * orthoP_4wk.median",
     "max_log_tu * Riffle.FRC * Temp.median",
     "max_log_tu * Riffle.FRC * orthoP_4wk.median",
     "max_log_tu * Temp.median * orthoP_4wk.median"
@@ -56,6 +53,7 @@ for (i in names(data_cwm_env_lf)) {
 cwm_interactions <- rbindlist(cwm_interactions, idcol = "Region")
 # saveRDS(cwm_interactions, file.path(path_cache, "cwm_interactions.rds"))
 
+# ______________________________________________________________________________
 # TPG family level ----
 tpg_fam <- list(
     "TPG1_fam",
@@ -90,11 +88,12 @@ tpg_fam_interactions <- rbindlist(tpg_fam_interactions, idcol = "Region")
 
 # Search for significant interactions with maxTU
 # Note for paper: T10 and T1 seem to correlate frequently with other variables
-tpg_fam_interactions[fo %like% "TPG1_.+", ] %>%
-    .[p.value <= 0.05 & term != "(Intercept)", ] %>%
-    .[term %like% ":", ] %>% 
-    .[term %like% "max_log_tu", ]
+# tpg_fam_interactions[fo %like% "TPG1_.+", ] %>%
+#     .[p.value <= 0.05 & term != "(Intercept)", ] %>%
+#     .[term %like% ":", ] %>% 
+#     .[term %like% "max_log_tu", ]
 
+# ______________________________________________________________________________
 # TPG genus level ---- 
 tpg_genus <- list(
     "TPG4_genus",
@@ -127,11 +126,11 @@ saveRDS(
 )
 
 # Search for significant interactions with maxTU
-tpg_genus_interactions[p.value <= 0.05 & term != "(Intercept)", ] %>%
-    .[term %like% ":", ] %>%
-    .[term %like% "max_log_tu", ]
+# tpg_genus_interactions[p.value <= 0.05 & term != "(Intercept)", ] %>%
+#     .[term %like% ":", ] %>%
+#     .[term %like% "max_log_tu", ]
 
-
+# ______________________________________________________________________________
 # EPT ----
 ept_env <- readRDS(file.path(path_cache, "ept_env.rds"))
 collect_form_ept <- expand.grid("frac_EPT", "~", interactions)
@@ -140,7 +139,6 @@ collect_form_ept <- as.data.table(collect_form_ept) %>%
     as.list(.)
 
 # Data combined, easy to calc interactions
-# (could have used this approach for the other data as well?)
 ept_interactions <- ept_env[, fun_interactions(.SD, form = collect_form_ept), by = "Region"]
 saveRDS(
     ept_interactions,
@@ -148,10 +146,11 @@ saveRDS(
 )
 
 # Search for significant interactions with maxTU
-ept_interactions[p.value <= 0.05 & term != "(Intercept)", ] %>%
-    .[term %like% ":", ] %>%
-    .[term %like% "max_log_tu", ]
+# ept_interactions[p.value <= 0.05 & term != "(Intercept)", ] %>%
+#     .[term %like% ":", ] %>%
+#     .[term %like% "max_log_tu", ]
 
+# ______________________________________________________________________________
 # SPEAR ----
 spear_env <- readRDS(file.path(path_cache, "spear_env.rds"))
 collect_form_spear <- expand.grid("SPEAR_Pestizide", "~", interactions)
@@ -175,6 +174,6 @@ saveRDS(
 
 # Search for significant interactions with maxTU
 # Only few two-way interactions with temp., riffle fraction, and phospate
-spear_interactions[p.value <= 0.05 & term != "(Intercept)", ] %>%
-    .[term %like% ":", ] %>%
-    .[term %like% "max_log_tu", ]
+# spear_interactions[p.value <= 0.05 & term != "(Intercept)", ] %>%
+#     .[term %like% ":", ] %>%
+#     .[term %like% "max_log_tu", ]
