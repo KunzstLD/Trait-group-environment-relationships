@@ -169,49 +169,82 @@ pred_error[ci_pred_error,
 ]
 saveRDS(pred_error, file.path(path_cache, "pred_error.rds"))
 
-ggplot(pred_error) +
-  geom_point(aes(x = approach, y = pred_test^2)) +
-  geom_point(aes(x = approach, y = pred_train^2),
-    alpha = 0.3,
-    position = position_nudge(x = 0.2)
-  ) +
+# Plot for publication
+pred_error <- readRDS(file.path(path_cache, "pred_error.rds"))
+test_error_lf <- melt(
+  pred_error,
+  id.vars = c("region", "approach", "CI_rmse_test_2.5", "CI_rmse_test_97.5"),
+  measure.vars = "pred_test",
+  variable.name = "dataset",
+  value.name = "rmse"
+)
+setnames(
+  test_error_lf,
+  c("CI_rmse_test_2.5", "CI_rmse_test_97.5"),
+  c("CI_rmse_2.5", "CI_rmse_97.5")
+)
+train_error_lf <-  melt(
+  pred_error,
+  id.vars = c(
+    "region",
+    "approach",
+    "CI_rmse_train_2.5",
+    "CI_rmse_train_97.5"
+  ),
+  measure.vars = "pred_train",
+  variable.name = "dataset",
+  value.name = "rmse"
+)
+setnames(
+  train_error_lf,
+  c("CI_rmse_train_2.5", "CI_rmse_train_97.5"),
+  c("CI_rmse_2.5", "CI_rmse_97.5")
+)
+pred_error_lf <- rbind(test_error_lf, train_error_lf)
+
+
+ggplot(pred_error_lf[approach != "tpg_genus", ]) +
   geom_pointrange(
     aes(
       x = approach,
-      y = pred_test^2,
-      ymin = CI_rmse_test_2.5^2,
-      ymax = CI_rmse_test_97.5^2
-    )
-  ) +
-  geom_pointrange(
-    aes(
-      x = approach,
-      y = pred_train^2,
-      ymin = CI_rmse_train_2.5^2,
-      ymax = CI_rmse_train_97.5^2
+      y = rmse^2,
+      ymin = CI_rmse_2.5^2,
+      ymax = CI_rmse_97.5^2,
+      color=dataset, 
+      group=dataset
     ),
-    position = position_nudge(x = 0.2),
-    alpha = 0.35
+    position = position_dodge(width = 0.3),
+    size = 0.7
   ) +
   facet_wrap(. ~ region) +
-  labs(x = "", y = "MSE") +
+  labs(x = "", y = "MSE", color= NULL) +
   scale_x_discrete(labels = c("Traits", "TPG \n (family)", "TPG \n (genus)")) +
+  scale_color_manual(
+    breaks = c("pred_test", "pred_train"),
+    values = c("pred_test" = "black", "pred_train" = "grey60"),
+    labels = c("pred_test" = "Test", "pred_train" = "Training")
+  ) +
   theme_bw() +
   theme(
+    legend.text  = element_text(size = 16, family = "Roboto Mono"),
+    legend.background = element_rect(color = "black", fill = "white", linewidth = 0.9),
+    legend.position   = c(0.81, 0.10),                 
+    legend.justification = c("right", "top"),
     axis.title = element_text(size = 16, face="bold"),
     axis.text.x = element_text(
       family = "Roboto Mono",
-      size = 16
+      size = 18
     ),
     axis.text.y = element_text(
       family = "Roboto Mono",
-      size = 16
+      size = 18
     ),
     strip.text = element_text(
       family = "Roboto Mono",
-      size = 16
+      size = 18
     )
   )
+
 ggsave(
   filename = file.path(
     path_paper,

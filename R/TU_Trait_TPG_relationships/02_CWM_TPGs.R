@@ -68,6 +68,9 @@ abund_wf <- lapply(abund_ls, function(y)
         abundance)] %>%
     dcast(., site ~ taxon, value.var = "abundance"))
 
+abund_ls$California
+
+
 ## CWM ----
 data_cwm <- Map(
   function(x, y)

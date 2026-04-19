@@ -1,17 +1,15 @@
 # ________________________________________________
 # Abundance weighted fraction of TPGs ----
-# Same families as in the CWM approach should be covered
-# (California)
+# basically, CWM TPGs
 ## _______________________________________________
 
 # Abundance weighted fraction
 trait_family <- readRDS(file.path(path_cache, "trait_family_tpg.rds"))
 trait_genera <- readRDS(file.path(path_cache, "trait_genera_tpg.rds"))
 abund <- readRDS(file.path(path_cache, "total_abund_CEOPT.rds"))
-unique(abund[, .(taxon, taxonomic_level)]) %>% 
-.[, .N, by = "taxonomic_level"]
+unique(abund[, .(taxon, taxonomic_level)]) %>%
+  .[, .N, by = "taxonomic_level"]
 trait_genera$order %>% unique
-
 
 # Merge TPGs
 # family level
@@ -21,10 +19,6 @@ abund[trait_family, group_family := i.group, on = "family"]
 
 # genus level
 abund[trait_genera, group_genus := i.group, on = "genus"]
-
-abund[Region=="California" & group_family==10, order] |> unique()
-trait_family[family=="Muscidae", ]
-
 
 # Some taxa have a relatively high abundance (up to > 8000)
 # use sqrt tranformation
@@ -43,6 +37,7 @@ abund_comb <- list(
 
 # Taxonomic composition
 # family level
+# abund_family[group==15 & abundance > 0, ]
 abund_family[, .(
   Region,
   group,
@@ -111,6 +106,7 @@ abund_comb <- lapply(abund_comb, function(x) {
     weighted_fraction_rel
   )])
 })
+
 # Use of relative fraction, slightly better
 # performance than absolute (with family level trait data)
 # abund_weighted_frac <- unique(abund[, .(
