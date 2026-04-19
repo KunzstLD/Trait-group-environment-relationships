@@ -28,6 +28,9 @@ library(patchwork)
 library(ggsci)
 library(GGally)
 library(broom)
+# install.packages("devtools")
+# devtools::install_github("ricardo-bion/ggradar")
+library(ggradar)
 
 # Distance matrices and clustering
 library(ade4)
@@ -50,10 +53,14 @@ library(DALEXtra)
 library(DHARMa)
 library(mgcv)
 library(gratia)
+library(car)
 
 # RDA
 library(vegan)
 library(corrplot)
+
+# https://r-charts.com/ranking/radar-chart/
+library(fmsb)
 
 ## Paths
 path_base <- "C:/Users/sk193/Documents/PhD/Trait-group-environment-relationships"
