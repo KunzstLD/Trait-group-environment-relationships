@@ -135,8 +135,8 @@ ls_pesticide_plots <- split(rsqa_cmax_lf, by = "pesticide") %>%
 
 ### Cmax Pesticides
 
-:::: {.column-screen}
-::: {.panel-tabset}
+:::: column-screen
+::: panel-tabset
 ```{r}
 #| results: asis
 #| fig-width: 14

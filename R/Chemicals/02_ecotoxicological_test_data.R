@@ -324,3 +324,11 @@ setcolorder(meta_rsqa_cmax, c("CASRN", "Chemname"))
 
 # Save for further use in R
 saveRDS(meta_rsqa_cmax, file.path(path_cache, "meta_rsqa_cmax.rds"))
+
+
+meta_rsqa_cmax <- readRDS(file.path(path_cache, "meta_rsqa_cmax.rds"))
+
+meta_rsqa_cmax[Chemname=='N-(3,4-Dichlorophenyl)-N-methylurea', ]
+meta_rsqa_cmax[!is.na(lc50_ug_l), ]
+
+
